@@ -1,10 +1,18 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 function Login() {
+  const navigate = useNavigate();
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    // TODO: friend will replace this with real API call (authService.js)
+    navigate("/dashboard");
+  };
+
   return (
     <div style={{ maxWidth: "350px", margin: "80px auto", color: "white" }}>
       <h2>Login</h2>
-      <form>
+      <form onSubmit={handleSubmit}>
         <input type="email" placeholder="Email" style={inputStyle} />
         <input type="password" placeholder="Password" style={inputStyle} />
         <button type="submit" style={buttonStyle}>Login</button>
