@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Home from "./pages/Home";
@@ -18,9 +18,17 @@ function App() {
     <BrowserRouter>
       <div style={{ backgroundColor: "#121212", minHeight: "100vh" }}>
         <Routes>
-          <Route path="/" element={<Login />} />
+          <Route
+            path="/"
+            element={
+              localStorage.getItem("authToken")
+                ? <Navigate to="/dashboard" replace />
+                : <Navigate to="/login" replace />
+            }
+          />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="*" element={<Navigate to="/" />} />
           <Route
             path="/dashboard"
             element={
@@ -31,7 +39,11 @@ function App() {
           />
           <Route
             path="/subject/:id"
-            element={<Subject subjects={subjects} />}
+            element={
+              <ProtectedRoute>
+                <Subject subjects={subjects} />
+              </ProtectedRoute>
+            }
           />
         </Routes>
       </div>

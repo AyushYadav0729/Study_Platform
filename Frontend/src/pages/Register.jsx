@@ -2,6 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import Input from "../components/Input";
 import Button from "../components/Button";
+import { authService } from "../services/authService";
 import {
   validateName,
   validateEmail,
@@ -24,7 +25,7 @@ function Register() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     const newErrors = {
@@ -36,14 +37,35 @@ function Register() {
         formData.confirmPassword
       ),
     };
+
     setErrors(newErrors);
 
-    const hasErrors = Object.values(newErrors).some((msg) => msg !== "");
+    const hasErrors = Object.values(newErrors).some(
+      (msg) => msg !== ""
+    );
+
     if (hasErrors) return;
 
-    // TODO: Ayush/Dhruv will replace this with real API call (authService.js)
-    localStorage.setItem("isLoggedIn", "true");
-    navigate("/dashboard");
+    try {
+      await authService.signup({
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+      });
+
+      alert("Account created successfully!");
+
+      navigate("/login");
+
+    } catch (error) {
+
+      if (error.response) {
+        alert(error.response.data.detail || "Registration failed");
+      } else {
+        alert("Unable to connect to the server.");
+      }
+
+    }
   };
 
   return (
