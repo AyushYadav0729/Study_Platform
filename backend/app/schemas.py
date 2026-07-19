@@ -1,5 +1,5 @@
 #this is a pydantic validation script which checks if the input from forntend signup is correct or not 
-
+from uuid import UUID
 from pydantic import BaseModel, EmailStr
 
 class UserSignup(BaseModel):
@@ -16,12 +16,21 @@ class Token(BaseModel):
     token_type: str
 
 class UserResponse(BaseModel):
-    id: int
+    id: UUID
     name: str
     email: EmailStr
 
+    model_config = {
+        "from_attributes": True
+    }
+
+
 class SignupResponse(BaseModel):
     message: str
-    id: int
+    id: UUID
     name: str
     email: EmailStr
+
+    model_config = {
+        "from_attributes": True
+    }
