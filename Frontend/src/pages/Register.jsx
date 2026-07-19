@@ -41,7 +41,8 @@ function Register() {
     const hasErrors = Object.values(newErrors).some((msg) => msg !== "");
     if (hasErrors) return;
 
-    // TODO: friend will replace this with real API call (authService.js)
+    // TODO: Ayush/Dhruv will replace this with real API call (authService.js)
+    localStorage.setItem("isLoggedIn", "true");
     navigate("/dashboard");
   };
 
