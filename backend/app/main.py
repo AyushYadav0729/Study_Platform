@@ -2,8 +2,6 @@ from fastapi import FastAPI , HTTPException, status , Depends
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from fastapi.middleware.cors import CORSMiddleware
-
 from app.models import User
 from app.database import engine, Base, get_db
 from app.security import hash_password, verify_password
@@ -12,16 +10,6 @@ from app.schemas import UserSignup , SignupResponse , UserResponse, Token
 from app.auth import get_current_user
 
 app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 Base.metadata.create_all(bind=engine)
 
