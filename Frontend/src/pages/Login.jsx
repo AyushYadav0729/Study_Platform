@@ -1,48 +1,66 @@
 import { Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import Input from "../components/Input";
+import Button from "../components/Button";
+import { validateEmail, validatePassword } from "../utils/validators";
 
 function Login() {
   const navigate = useNavigate();
+  const [formData, setFormData] = useState({ email: "", password: "" });
+  const [errors, setErrors] = useState({});
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    // TODO: friend will replace this with real API call (authService.js)
+
+    const newErrors = {
+      email: validateEmail(formData.email),
+      password: validatePassword(formData.password),
+    };
+    setErrors(newErrors);
+
+    const hasErrors = Object.values(newErrors).some((msg) => msg !== "");
+    if (hasErrors) return;
+
+    // TODO: Ayush/Dhruv will replace this with real API call (authService.js)
+    localStorage.setItem("isLoggedIn", "true");
     navigate("/dashboard");
   };
 
   return (
-    <div style={{ maxWidth: "350px", margin: "80px auto", color: "white" }}>
-      <h2>Login</h2>
+    <div className="max-w-[350px] mx-auto mt-20 text-white">
+      <h2 className="text-2xl font-semibold mb-4">Login</h2>
       <form onSubmit={handleSubmit}>
-        <input type="email" placeholder="Email" style={inputStyle} />
-        <input type="password" placeholder="Password" style={inputStyle} />
-        <button type="submit" style={buttonStyle}>Login</button>
+        <Input
+          label="Email"
+          type="email"
+          name="email"
+          value={formData.email}
+          onChange={handleChange}
+          error={errors.email}
+        />
+        <Input
+          label="Password"
+          type="password"
+          name="password"
+          value={formData.password}
+          onChange={handleChange}
+          error={errors.password}
+        />
+        <Button type="submit">Login</Button>
       </form>
-      <p style={{ marginTop: "16px" }}>
-        Don't have an account? <Link to="/register" style={{ color: "#818cf8" }}>Sign Up</Link>
+      <p className="mt-4">
+        Don't have an account?{" "}
+        <Link to="/register" className="text-indigo-400">
+          Sign Up
+        </Link>
       </p>
     </div>
   );
 }
-
-const inputStyle = {
-  display: "block",
-  width: "100%",
-  padding: "10px",
-  marginBottom: "12px",
-  backgroundColor: "#1e1e1e",
-  border: "1px solid #333",
-  color: "white",
-  borderRadius: "6px",
-};
-
-const buttonStyle = {
-  width: "100%",
-  padding: "10px",
-  backgroundColor: "#4f46e5",
-  color: "white",
-  border: "none",
-  borderRadius: "6px",
-  cursor: "pointer",
-};
 
 export default Login;

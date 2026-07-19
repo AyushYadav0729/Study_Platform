@@ -4,6 +4,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Home from "./pages/Home";
 import Subject from "./pages/Subject";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
   const [subjects, setSubjects] = useState([]);
@@ -22,7 +23,11 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route
             path="/dashboard"
-            element={<Home subjects={subjects} onAddSubject={handleAddSubject} />}
+            element={
+              <ProtectedRoute>
+                <Home subjects={subjects} onAddSubject={handleAddSubject} />
+              </ProtectedRoute>
+            }
           />
           <Route
             path="/subject/:id"
