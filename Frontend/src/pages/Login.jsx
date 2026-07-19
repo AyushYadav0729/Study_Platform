@@ -3,6 +3,7 @@ import { useState } from "react";
 import Input from "../components/Input";
 import Button from "../components/Button";
 import { validateEmail, validatePassword } from "../utils/validators";
+import { authService } from "../services/authService";
 
 function Login() {
   const navigate = useNavigate();
@@ -11,26 +12,52 @@ function Login() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const handleSubmit = async (e) => {
+      e.preventDefault();
 
-    const newErrors = {
-      email: validateEmail(formData.email),
-      password: validatePassword(formData.password),
-    };
-    setErrors(newErrors);
+      const newErrors = {
+        email: validateEmail(formData.email),
+        password: validatePassword(formData.password),
+      };
 
-    const hasErrors = Object.values(newErrors).some((msg) => msg !== "");
-    if (hasErrors) return;
+      setErrors(newErrors);
 
-    // TODO: Ayush/Dhruv will replace this with real API call (authService.js)
-    localStorage.setItem("isLoggedIn", "true");
-    navigate("/dashboard");
+      const hasErrors = Object.values(newErrors).some(
+        (msg) => msg !== ""
+      );
+
+      if (hasErrors) return;
+
+      try {
+        const response = await authService.login(
+          formData.email,
+          formData.password
+        );
+
+        localStorage.setItem(
+          "authToken",
+          response.data.access_token
+        );
+
+        navigate("/dashboard");
+
+      } catch (error) {
+
+        if (error.response) {
+          alert(error.response.data.detail || "Login failed");
+        } else {
+          alert("Unable to connect to the server.");
+        }
+
+      }
   };
-
   return (
     <div className="max-w-[350px] mx-auto mt-20 text-white">
       <h2 className="text-2xl font-semibold mb-4">Login</h2>

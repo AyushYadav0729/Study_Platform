@@ -15,7 +15,13 @@ function Subject({ subjects }) {
     e.preventDefault();
     if (!file) return;
 
-    setNotes([...notes, { unit: selectedUnit, fileName: file.name }]);
+    setNotes((prev) => [
+    ...prev,
+    {
+        unit: selectedUnit,
+        fileName: file.name,
+    },
+    ]);
     setFile(null);
     e.target.reset();
   };
