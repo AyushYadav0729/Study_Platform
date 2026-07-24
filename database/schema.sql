@@ -5,8 +5,5 @@ CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    semester INT,
-    branch TEXT,
-    created_at TIMESTAMP DEFAULT now()
+    password TEXT NOT NULL
 );
