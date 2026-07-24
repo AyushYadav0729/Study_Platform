@@ -1,80 +1,116 @@
-import { Link } from "react-router-dom";
 import { useState } from "react";
+import { NavLink } from "react-router-dom";
+import { LayoutGrid, Plus, LogOut, BookOpen } from "lucide-react";
+import Logo from "./ui/Logo";
+import AddSubjectModal from "./AddSubjectModal";
 
-function Sidebar({ subjects, onAddSubject }) {
-  const [name, setName] = useState("");
+function Sidebar({ subjects, onAddSubject, user, onLogout }) {
+  const [modalOpen, setModalOpen] = useState(false);
 
-  const handleAdd = (e) => {
-    e.preventDefault();
-    if (!name.trim()) return;
-    onAddSubject(name);
-    setName("");
-  };
+  const initials = user?.name
+    ? user.name
+        .split(" ")
+        .map((part) => part[0])
+        .slice(0, 2)
+        .join("")
+        .toUpperCase()
+    : "";
 
   return (
-    <div style={sidebarStyle}>
-      <h3>My Subjects</h3>
+    <div className="flex h-full flex-col px-5 py-6">
+      <div className="px-1">
+        <Logo />
+      </div>
 
-      <form onSubmit={handleAdd} style={{ marginTop: "16px" }}>
-        <input
-          type="text"
-          placeholder="New subject name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          style={inputStyle}
-        />
-        <button type="submit" style={buttonStyle}>+ Add Subject</button>
-      </form>
+      <nav className="mt-8">
+        <NavLink
+          to="/dashboard"
+          end
+          className={({ isActive }) =>
+            `flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-colors ${
+              isActive
+                ? "bg-surface text-ink"
+                : "text-ink-dim hover:bg-surface hover:text-ink"
+            }`
+          }
+        >
+          <LayoutGrid className="h-4 w-4" />
+          Dashboard
+        </NavLink>
+      </nav>
 
-      <ul style={{ listStyle: "none", padding: 0, marginTop: "20px" }}>
-        {subjects.map((subject) => (
-          <li key={subject.id} style={{ marginBottom: "10px" }}>
-            <Link to={`/subject/${subject.id}`} style={linkStyle}>
-              {subject.name}
-            </Link>
-          </li>
-        ))}
-      </ul>
+      <div className="mt-8 flex items-center justify-between px-1">
+        <span
+          className="text-[11px] font-medium uppercase tracking-[0.12em] text-ink-faint"
+          style={{ fontFamily: "var(--font-mono)" }}
+        >
+          Subjects
+        </span>
+        <button
+          type="button"
+          onClick={() => setModalOpen(true)}
+          aria-label="Add subject"
+          className="flex h-6 w-6 items-center justify-center rounded-md text-ink-faint transition-colors hover:bg-surface hover:text-accent"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <div className="mt-2 flex-1 overflow-y-auto">
+        {subjects.length === 0 ? (
+          <p className="px-3 py-3 text-[13px] leading-snug text-ink-faint">
+            No subjects yet. Add one to start uploading notes.
+          </p>
+        ) : (
+          <ul className="space-y-0.5">
+            {subjects.map((subject) => (
+              <li key={subject.id}>
+                <NavLink
+                  to={`/subject/${subject.id}`}
+                  className={({ isActive }) =>
+                    `flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] transition-colors ${
+                      isActive
+                        ? "bg-surface text-ink"
+                        : "text-ink-dim hover:bg-surface hover:text-ink"
+                    }`
+                  }
+                >
+                  <BookOpen className="h-3.5 w-3.5 shrink-0 text-teal" />
+                  <span className="truncate">{subject.name}</span>
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="mt-4 flex items-center gap-2.5 border-t border-border pt-4">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-teal-soft text-[12px] font-semibold text-teal">
+          {initials || "•"}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-medium text-ink">
+            {user?.name || "Loading…"}
+          </p>
+          <p className="truncate text-[12px] text-ink-faint">{user?.email}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onLogout}
+          aria-label="Log out"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink-faint transition-colors hover:bg-danger-soft hover:text-danger"
+        >
+          <LogOut className="h-4 w-4" />
+        </button>
+      </div>
+
+      <AddSubjectModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onAdd={onAddSubject}
+      />
     </div>
   );
 }
-
-const sidebarStyle = {
-  width: "240px",
-  minHeight: "100vh",
-  backgroundColor: "#1a1a1a",
-  padding: "20px",
-  color: "white",
-  borderRight: "1px solid #2a2a2a",
-  boxSizing: "border-box",
-};
-
-const inputStyle = {
-  display: "block",
-  width: "100%",
-  padding: "8px",
-  marginBottom: "10px",
-  backgroundColor: "#1e1e1e",
-  border: "1px solid #333",
-  color: "white",
-  borderRadius: "6px",
-  boxSizing: "border-box",
-};
-
-const buttonStyle = {
-  width: "100%",
-  padding: "8px",
-  backgroundColor: "#4f46e5",
-  color: "white",
-  border: "none",
-  borderRadius: "6px",
-  cursor: "pointer",
-};
-
-const linkStyle = {
-  color: "#e0e0e0",
-  textDecoration: "none",
-  fontSize: "15px",
-};
 
 export default Sidebar;

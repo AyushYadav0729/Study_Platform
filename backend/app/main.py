@@ -1,4 +1,4 @@
-from fastapi import FastAPI , HTTPException, status , Depends
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
