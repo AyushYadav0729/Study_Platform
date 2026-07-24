@@ -1,1 +1,115 @@
 @import "tailwindcss";
+
+/* ============================================================
+   Study-Stop : design tokens
+   A dark "study desk" theme: warm charcoal surfaces, parchment
+   ink, and a highlighter-gold accent. Secondary marks borrow
+   from a teal stamp ink and a red correction-pen danger color.
+   ============================================================ */
+@theme {
+  --color-bg: #15130f;
+  --color-bg-alt: #1b1712;
+  --color-surface: #211c16;
+  --color-surface-hover: #29231b;
+  --color-border: #362f22;
+
+  --color-ink: #f2ecdd;
+  --color-ink-dim: #b6a993;
+  --color-ink-faint: #7c705d;
+
+  --color-accent: #e7b74a;
+  --color-accent-strong: #f3c664;
+
+  --color-teal: #5cb3a0;
+  --color-teal-soft: #1c2b26;
+
+  --color-danger: #e2604a;
+  --color-danger-soft: #2c1c17;
+
+  --font-display: "Fraunces", "Iowan Old Style", serif;
+  --font-body: "Public Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-accent) 35%, transparent);
+  color: var(--color-ink);
+}
+
+/* Scrollbars — keep them quiet on the dark surface */
+* {
+  scrollbar-color: var(--color-border) transparent;
+  scrollbar-width: thin;
+}
+
+/* ---------------------------------------------------------
+   Signature paper details
+   --------------------------------------------------------- */
+
+/* Faint ruled notebook lines, used behind hero copy */
+.ruled-paper {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 31px,
+    color-mix(in srgb, var(--color-border) 55%, transparent) 32px
+  );
+}
+
+/* Folded top-right page corner, used on cards */
+.dog-ear {
+  position: relative;
+}
+.dog-ear::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  background: linear-gradient(
+    225deg,
+    var(--color-bg-alt) 50%,
+    var(--color-border) 51%
+  );
+  border-bottom-left-radius: 3px;
+  border-top-right-radius: 12px;
+  opacity: 0.9;
+  transition: width 150ms ease, height 150ms ease;
+}
+.dog-ear:hover::after {
+  width: 20px;
+  height: 20px;
+}
+
+/* Highlighter stroke behind emphasized text */
+.mark {
+  padding: 0 0.2em;
+  background-image: linear-gradient(
+    120deg,
+    color-mix(in srgb, var(--color-accent) 32%, transparent) 0%,
+    color-mix(in srgb, var(--color-accent) 32%, transparent) 100%
+  );
+  background-repeat: no-repeat;
+  background-size: 100% 0.5em;
+  background-position: 0 78%;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

@@ -1,39 +1,39 @@
-import { useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Home from "./pages/Home";
 import Subject from "./pages/Subject";
 import ProtectedRoute from "./components/ProtectedRoute";
+import { useSubjects } from "./hooks/useSubjects";
+import { authService } from "./services/authService";
 
 function App() {
-  const [subjects, setSubjects] = useState([]);
-
-  const handleAddSubject = (name) => {
-    const newSubject = { id: Date.now().toString(), name };
-    setSubjects([...subjects, newSubject]);
-  };
+  const { subjects, loading, addSubject } = useSubjects();
 
   return (
     <BrowserRouter>
-      <div style={{ backgroundColor: "#121212", minHeight: "100vh" }}>
+      <div className="min-h-screen bg-bg">
         <Routes>
           <Route
             path="/"
             element={
-              localStorage.getItem("authToken")
-                ? <Navigate to="/dashboard" replace />
-                : <Navigate to="/login" replace />
+              <Navigate
+                to={authService.isAuthenticated() ? "/dashboard" : "/login"}
+                replace
+              />
             }
           />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
-          <Route path="*" element={<Navigate to="/" />} />
           <Route
             path="/dashboard"
             element={
               <ProtectedRoute>
-                <Home subjects={subjects} onAddSubject={handleAddSubject} />
+                <Home
+                  subjects={subjects}
+                  subjectsLoading={loading}
+                  onAddSubject={addSubject}
+                />
               </ProtectedRoute>
             }
           />
@@ -45,6 +45,7 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
     </BrowserRouter>
