@@ -7,7 +7,6 @@ class UserSignup(BaseModel):
     email: EmailStr
     password: str
 
-
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -21,12 +20,22 @@ class UserResponse(BaseModel):
         "from_attributes": True
     }
 
-
 class SignupResponse(BaseModel):
     message: str
     id: UUID
     name: str
     email: EmailStr
+
+    model_config = {
+        "from_attributes": True
+    }
+class SubjectCreate(BaseModel):
+    name: str
+
+
+class SubjectResponse(BaseModel):
+    id: UUID
+    name: str
 
     model_config = {
         "from_attributes": True
