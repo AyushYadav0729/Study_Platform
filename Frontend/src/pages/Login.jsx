@@ -8,7 +8,7 @@ import Alert from "../components/ui/Alert";
 import { validateEmail, validatePassword } from "../utils/validators";
 import { authService } from "../services/authService";
 
-function Login() {
+function Login({ onLogin }) {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [errors, setErrors] = useState({});
@@ -38,6 +38,7 @@ function Login() {
     try {
       const response = await authService.login(formData.email, formData.password);
       localStorage.setItem("authToken", response.data.access_token);
+      await onLogin();
       navigate("/dashboard");
     } catch (error) {
       if (error.response) {

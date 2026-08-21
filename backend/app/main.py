@@ -111,6 +111,18 @@ def create_subject(
 
     return new_subject
 
+@app.get("/subjects", response_model=list[SubjectResponse])
+def get_subjects(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    subjects = db.query(Subject).filter(
+        Subject.user_id == current_user.id
+    ).all()
+
+    return subjects
+
+
 @app.get("/about")
 def about():
     return {

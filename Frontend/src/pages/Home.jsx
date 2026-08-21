@@ -9,7 +9,7 @@ import Button from "../components/ui/Button";
 import DashboardLayout from "../components/layout/DashboardLayout";
 import { authService } from "../services/authService";
 
-function Home({ subjects, subjectsLoading, onAddSubject }) {
+function Home({ subjects, subjectsLoading, onAddSubject, onRefreshSubjects, onClearSubjects, }) {
   const [user, setUser] = useState(null);
   const [profileError, setProfileError] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
@@ -28,6 +28,7 @@ function Home({ subjects, subjectsLoading, onAddSubject }) {
   }, []);
 
   const handleLogout = () => {
+    onClearSubjects();
     authService.logout();
     navigate("/login");
   };
