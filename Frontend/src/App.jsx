@@ -13,6 +13,7 @@ function App() {
   loading,
   addSubject,
   refreshSubjects,
+  removeSubject,
   clearSubjects,
   } = useSubjects();
 
@@ -44,6 +45,7 @@ function App() {
                   onAddSubject={addSubject}
                   onRefreshSubjects={refreshSubjects}
                   onClearSubjects={clearSubjects}
+                  onRemoveSubject={removeSubject}
                 />
               </ProtectedRoute>
             }

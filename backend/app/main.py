@@ -17,7 +17,7 @@ from app.schemas import (
     SubjectResponse
 )
 from app.auth import get_current_user
-
+from uuid import UUID
 
 app = FastAPI()
 app.add_middleware(
@@ -122,6 +122,25 @@ def get_subjects(
 
     return subjects
 
+@app.delete("/subjects/{subject_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_subject(
+    subject_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    subject = db.query(Subject).filter(
+        Subject.id == subject_id,
+        Subject.user_id == current_user.id
+    ).first()
+
+    if subject is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Subject not found"
+        )
+
+    db.delete(subject)
+    db.commit()
 
 @app.get("/about")
 def about():

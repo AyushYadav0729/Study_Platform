@@ -15,7 +15,12 @@ class User(Base):
     email = Column(String, unique=True, nullable=False)
     password = Column(String, nullable=False)
 
-    subjects = relationship("Subject", back_populates="owner")
+    subjects = relationship(
+        "Subject",
+        back_populates="owner",
+        cascade="all, delete-orphan"
+    )
+
 
 class Subject(Base):
     __tablename__ = "subjects"
@@ -36,7 +41,13 @@ class Subject(Base):
     )
 
     owner = relationship("User", back_populates="subjects")
-    units = relationship("Unit", back_populates="subject")
+
+    units = relationship(
+        "Unit",
+        back_populates="subject",
+        cascade="all, delete-orphan"
+    )
+
 
 class Unit(Base):
     __tablename__ = "units"
@@ -56,8 +67,17 @@ class Unit(Base):
         default=datetime.utcnow
     )
 
-    subject = relationship("Subject", back_populates="units")
-    notes = relationship("Note", back_populates="unit")
+    subject = relationship(
+        "Subject",
+        back_populates="units"
+    )
+
+    notes = relationship(
+        "Note",
+        back_populates="unit",
+        cascade="all, delete-orphan"
+    )
+
 
 class Note(Base):
     __tablename__ = "notes"
@@ -79,4 +99,7 @@ class Note(Base):
         default=datetime.utcnow
     )
 
-    unit = relationship("Unit", back_populates="notes")
+    unit = relationship(
+        "Unit",
+        back_populates="notes"
+    )

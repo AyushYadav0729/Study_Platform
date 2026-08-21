@@ -9,7 +9,7 @@ import Button from "../components/ui/Button";
 import DashboardLayout from "../components/layout/DashboardLayout";
 import { authService } from "../services/authService";
 
-function Home({ subjects, subjectsLoading, onAddSubject, onRefreshSubjects, onClearSubjects, }) {
+function Home({ subjects, subjectsLoading, onAddSubject, onRefreshSubjects, onClearSubjects, onRemoveSubject, }) {
   const [user, setUser] = useState(null);
   const [profileError, setProfileError] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
@@ -105,7 +105,11 @@ function Home({ subjects, subjectsLoading, onAddSubject, onRefreshSubjects, onCl
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {subjects.map((subject) => (
-              <SubjectCard key={subject.id} subject={subject} />
+              <SubjectCard
+                key={subject.id}
+                subject={subject}
+                onRemove={onRemoveSubject}
+              />
             ))}
           </div>
         )}
