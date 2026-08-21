@@ -1,17 +1,22 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { ArrowLeft, Upload, FileText } from "lucide-react";
+import { ArrowLeft, Upload, FileText, Trash2 } from "lucide-react";
 import Button from "../components/ui/Button";
 
 const UNITS = ["Unit 1", "Unit 2", "Unit 3", "Unit 4", "Unit 5"];
 
-function Subject({ subjects }) {
+function Subject({ subjects, onRemoveSubject }) {
   const { id } = useParams();
+  const navigate = useNavigate();
   const subject = subjects.find((s) => s.id === id);
 
   const [selectedUnit, setSelectedUnit] = useState(UNITS[0]);
   const [notes, setNotes] = useState([]);
   const [file, setFile] = useState(null);
+
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const handleUpload = (e) => {
     e.preventDefault();
@@ -20,6 +25,18 @@ function Subject({ subjects }) {
     setNotes((prev) => [...prev, { unit: selectedUnit, fileName: file.name }]);
     setFile(null);
     e.target.reset();
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await onRemoveSubject(subject.id);
+      navigate("/dashboard");
+    } catch {
+      setDeleteError("Couldn't delete this subject. Try again.");
+      setDeleting(false);
+    }
   };
 
   if (!subject) {
@@ -36,13 +53,24 @@ function Subject({ subjects }) {
   return (
     <div className="min-h-screen bg-bg">
       <div className="mx-auto max-w-4xl px-6 py-10 md:px-10">
-        <Link
-          to="/dashboard"
-          className="inline-flex items-center gap-1.5 text-[13px] text-ink-faint hover:text-ink"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Dashboard
-        </Link>
+        <div className="flex items-center justify-between">
+          <Link
+            to="/dashboard"
+            className="inline-flex items-center gap-1.5 text-[13px] text-ink-faint hover:text-ink"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Dashboard
+          </Link>
+
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={() => setConfirmOpen(true)}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete subject
+          </Button>
+        </div>
 
         <h1
           className="mt-4 text-[1.8rem] text-ink"
@@ -50,6 +78,8 @@ function Subject({ subjects }) {
         >
           {subject.name}
         </h1>
+
+        {/* ... rest of the upload form / notes list stays exactly the same ... */}
 
         <form
           onSubmit={handleUpload}
@@ -120,6 +150,51 @@ function Subject({ subjects }) {
           })}
         </div>
       </div>
+
+      {confirmOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+          onClick={() => !deleting && setConfirmOpen(false)}
+        >
+          <div
+            className="w-full max-w-[400px] rounded-xl border border-border bg-surface p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              className="text-[1.2rem] text-ink"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              Delete "{subject.name}"?
+            </h3>
+            <p className="mt-2 text-[14px] text-ink-dim">
+              This will permanently delete this subject and its notes. This can't be undone.
+            </p>
+
+            {deleteError && (
+              <p className="mt-2 text-[13px] text-danger">{deleteError}</p>
+            )}
+
+            <div className="mt-5 flex justify-end gap-2.5">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setConfirmOpen(false)}
+                disabled={deleting}
+              >
+                No, cancel
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                onClick={handleDelete}
+                loading={deleting}
+              >
+                Yes, delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

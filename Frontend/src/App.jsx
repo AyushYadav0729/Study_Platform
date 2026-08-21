@@ -54,7 +54,7 @@ function App() {
             path="/subject/:id"
             element={
               <ProtectedRoute>
-                <Subject subjects={subjects} />
+                 <Subject subjects={subjects} onRemoveSubject={removeSubject} />
               </ProtectedRoute>
             }
           />
