@@ -4,13 +4,20 @@ from sqlalchemy.orm import Session
 
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.models import User
+from app.models import User, Subject
 from app.database import engine, Base, get_db
 from app.security import hash_password, verify_password
 from app.jwt_handler import create_access_token
-from app.schemas import UserSignup , SignupResponse , UserResponse, Token
+from app.schemas import (
+    UserSignup,
+    SignupResponse,
+    UserResponse,
+    Token,
+    SubjectCreate,
+    SubjectResponse
+)
 from app.auth import get_current_user
-
+from uuid import UUID
 
 app = FastAPI()
 app.add_middleware(
@@ -86,6 +93,54 @@ def profile(current_user: User = Depends(get_current_user)):
         "name": current_user.name,
         "email": current_user.email
     }
+
+@app.post("/subjects", response_model=SubjectResponse, status_code=status.HTTP_201_CREATED)
+def create_subject(
+    subject: SubjectCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    new_subject = Subject(
+        name=subject.name,
+        user_id=current_user.id
+    )
+
+    db.add(new_subject)
+    db.commit()
+    db.refresh(new_subject)
+
+    return new_subject
+
+@app.get("/subjects", response_model=list[SubjectResponse])
+def get_subjects(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    subjects = db.query(Subject).filter(
+        Subject.user_id == current_user.id
+    ).all()
+
+    return subjects
+
+@app.delete("/subjects/{subject_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_subject(
+    subject_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    subject = db.query(Subject).filter(
+        Subject.id == subject_id,
+        Subject.user_id == current_user.id
+    ).first()
+
+    if subject is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Subject not found"
+        )
+
+    db.delete(subject)
+    db.commit()
 
 @app.get("/about")
 def about():

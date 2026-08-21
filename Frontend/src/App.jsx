@@ -8,7 +8,14 @@ import { useSubjects } from "./hooks/useSubjects";
 import { authService } from "./services/authService";
 
 function App() {
-  const { subjects, loading, addSubject } = useSubjects();
+  const {
+  subjects,
+  loading,
+  addSubject,
+  refreshSubjects,
+  removeSubject,
+  clearSubjects,
+  } = useSubjects();
 
   return (
     <BrowserRouter>
@@ -23,7 +30,10 @@ function App() {
               />
             }
           />
-          <Route path="/login" element={<Login />} />
+          <Route
+            path="/login"
+            element={<Login onLogin={refreshSubjects} />}
+          />
           <Route path="/register" element={<Register />} />
           <Route
             path="/dashboard"
@@ -33,6 +43,9 @@ function App() {
                   subjects={subjects}
                   subjectsLoading={loading}
                   onAddSubject={addSubject}
+                  onRefreshSubjects={refreshSubjects}
+                  onClearSubjects={clearSubjects}
+                  onRemoveSubject={removeSubject}
                 />
               </ProtectedRoute>
             }
