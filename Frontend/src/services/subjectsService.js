@@ -17,6 +17,17 @@ export const subjectsService = {
   remove: async (id) => {
     await api.delete(`/subjects/${id}`);
   },
+
+  createUnit: async (subjectId, name) => {
+    const response = await api.post(`/subjects/${subjectId}/units`, {
+      name: name,
+    });
+    return response.data;
+  },
+
+  removeUnit: async (subjectId, unitId) => {
+    await api.delete(`/units/${unitId}`);
+  },
 };
 
 export default subjectsService;
