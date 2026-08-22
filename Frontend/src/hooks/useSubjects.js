@@ -25,8 +25,8 @@ export function useSubjects() {
     refreshSubjects();
   }, [refreshSubjects]);
 
-  const addSubject = useCallback(async (name) => {
-    const subject = await subjectsService.create(name);
+  const addSubject = useCallback(async (name, syllabus) => {
+    const subject = await subjectsService.create(name, syllabus);
 
     setSubjects((prev) => [...prev, subject]);
 

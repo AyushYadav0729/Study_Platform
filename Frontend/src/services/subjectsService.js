@@ -6,9 +6,10 @@ export const subjectsService = {
     return response.data;
   },
 
-  create: async (name) => {
+  create: async (name, syllabus) => {
     const response = await api.post("/subjects", {
       name: name,
+      ...(syllabus ? { syllabus } : {}),
     });
 
     return response.data;

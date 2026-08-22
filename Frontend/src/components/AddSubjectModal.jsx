@@ -5,11 +5,13 @@ import Button from "./ui/Button";
 
 function AddSubjectModal({ open, onClose, onAdd }) {
   const [name, setName] = useState("");
+  const [syllabus, setSyllabus] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const handleClose = () => {
     setName("");
+    setSyllabus("");
     setError("");
     onClose();
   };
@@ -18,6 +20,7 @@ function AddSubjectModal({ open, onClose, onAdd }) {
     const handleKey = (e) => {
       if (e.key === "Escape") {
         setName("");
+        setSyllabus("");
         setError("");
         onClose();
       }
@@ -30,14 +33,14 @@ function AddSubjectModal({ open, onClose, onAdd }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const trimmed = name.trim();
-    if (!trimmed) {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
       setError("Give your subject a name");
       return;
     }
     setSubmitting(true);
     try {
-      await onAdd(trimmed);
+      await onAdd(trimmedName, syllabus.trim() || undefined);
       handleClose();
     } catch {
       setError("Couldn't add that subject. Try again.");
@@ -85,6 +88,25 @@ function AddSubjectModal({ open, onClose, onAdd }) {
             }}
             error={error}
           />
+
+          <div className="mb-4">
+            <label
+              htmlFor="syllabusText"
+              className="mb-1.5 block text-[13px] font-medium text-ink-dim"
+            >
+              Syllabus <span className="text-ink-faint">(optional)</span>
+            </label>
+            <textarea
+              id="syllabusText"
+              name="syllabusText"
+              rows={4}
+              placeholder="Paste your syllabus text directly from course page to help generate better summaries and quizzes"
+              value={syllabus}
+              onChange={(e) => setSyllabus(e.target.value)}
+              className="w-full resize-none rounded-lg border border-border bg-bg-alt/40 px-3.5 py-2.5 text-[15px] text-ink placeholder:text-ink-faint outline-none transition-colors focus:border-accent"
+            />
+          </div>
+
           <div className="mt-1 flex justify-end gap-2.5">
             <Button type="button" variant="ghost" onClick={handleClose}>
               Cancel
