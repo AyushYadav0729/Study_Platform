@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.models import User, Subject
+from app.models import User, Subject, Unit
 from app.database import engine, Base, get_db
 from app.security import hash_password, verify_password
 from app.jwt_handler import create_access_token
@@ -14,7 +14,9 @@ from app.schemas import (
     UserResponse,
     Token,
     SubjectCreate,
-    SubjectResponse
+    SubjectResponse,
+    UnitCreate,
+    UnitResponse
 )
 from app.auth import get_current_user
 from uuid import UUID
@@ -140,6 +142,79 @@ def delete_subject(
         )
 
     db.delete(subject)
+    db.commit()
+
+@app.post("/subjects/{subject_id}/units", response_model=UnitResponse, status_code=status.HTTP_201_CREATED)
+def create_unit(subject_id: UUID, unit: UnitCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    subject = db.query(Subject).filter(
+        Subject.id == subject_id,
+        Subject.user_id == current_user.id
+    ).first()
+
+    if subject is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Subject not found"
+        )
+
+    new_unit = Unit(
+        name=unit.name,
+        subject_id=subject.id
+    )
+
+    db.add(new_unit)
+    db.commit()
+    db.refresh(new_unit)
+
+    return new_unit
+
+@app.get(
+    "/subjects/{subject_id}/units",
+    response_model=list[UnitResponse]
+)
+def get_units(
+    subject_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    subject = db.query(Subject).filter(
+        Subject.id == subject_id,
+        Subject.user_id == current_user.id
+    ).first()
+
+    if subject is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Subject not found"
+        )
+
+    units = db.query(Unit).filter(
+        Unit.subject_id == subject.id
+    ).all()
+
+    return units
+
+@app.delete(
+    "/units/{unit_id}",
+    status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_unit(
+    unit_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    unit = db.query(Unit).join(Subject).filter(
+        Unit.id == unit_id,
+        Subject.user_id == current_user.id
+    ).first()
+
+    if unit is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unit not found"
+        )
+
+    db.delete(unit)
     db.commit()
 
 @app.get("/about")

@@ -40,3 +40,16 @@ class SubjectResponse(BaseModel):
     model_config = {
         "from_attributes": True
     }
+
+class UnitCreate(BaseModel):
+    name: str
+
+
+class UnitResponse(BaseModel):
+    id: UUID
+    name: str
+    subject_id: UUID
+
+    model_config = {
+        "from_attributes": True
+    }
