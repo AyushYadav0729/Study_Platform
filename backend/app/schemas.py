@@ -53,3 +53,14 @@ class UnitResponse(BaseModel):
     model_config = {
         "from_attributes": True
     }
+
+class NoteResponse(BaseModel):
+    id: UUID
+    unit_id: UUID
+    file_name: str
+    file_path: str
+    file_type: str
+
+    model_config = {
+        "from_attributes": True
+    }
