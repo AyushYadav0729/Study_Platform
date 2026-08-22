@@ -1,8 +1,11 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import api from "../services/authService";
-import { ArrowLeft, Upload, FileText, Trash2 } from "lucide-react";
+import subjectsService from "../services/subjectsService";
+import { ArrowLeft, Upload, FileText, Trash2, Plus, ChevronDown, X, Layers } from "lucide-react";
 import Button from "../components/ui/Button";
+import AddUnitModal from "../components/AddUnitModal";
+import UnitSelect from "../components/ui/UnitSelect";
 
 
 function Subject({ subjects, onRemoveSubject }) {
@@ -14,10 +17,15 @@ function Subject({ subjects, onRemoveSubject }) {
   const [selectedUnit, setSelectedUnit] = useState("");
   const [notes, setNotes] = useState([]);
   const [file, setFile] = useState(null);
+  const [addUnitOpen, setAddUnitOpen] = useState(false);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+
+  const [unitToDelete, setUnitToDelete] = useState(null);
+  const [deletingUnit, setDeletingUnit] = useState(false);
+  const [unitDeleteError, setUnitDeleteError] = useState("");
 
   useEffect(() => {
   const fetchUnits = async () => {
@@ -39,7 +47,7 @@ function Subject({ subjects, onRemoveSubject }) {
     e.preventDefault();
     if (!file) return;
 
-    setNotes((prev) => [...prev, { unit: selectedUnit, fileName: file.name }]);
+    setNotes((prev) => [...prev, { unit: selectedUnit, fileName: file.name, url: URL.createObjectURL(file) }]);
     setFile(null);
     e.target.reset();
   };
@@ -53,6 +61,31 @@ function Subject({ subjects, onRemoveSubject }) {
     } catch {
       setDeleteError("Couldn't delete this subject. Try again.");
       setDeleting(false);
+    }
+  };
+
+  const handleAddUnit = async (name) => {
+    const unit = await subjectsService.createUnit(id, name);
+    setUnits((prev) => [...prev, unit]);
+    setSelectedUnit(unit.id);
+  };
+
+  const handleConfirmRemoveUnit = async () => {
+    if (!unitToDelete) return;
+    setDeletingUnit(true);
+    setUnitDeleteError("");
+    try {
+      await subjectsService.removeUnit(id, unitToDelete.id);
+      setUnits((prev) => prev.filter((u) => u.id !== unitToDelete.id));
+      setNotes((prev) => prev.filter((n) => n.unit !== unitToDelete.id));
+      if (selectedUnit === unitToDelete.id) {
+        setSelectedUnit((prevUnits => prevUnits.find((u) => u.id !== unitToDelete.id)?.id || "")(units));
+      }
+      setUnitToDelete(null);
+    } catch {
+      setUnitDeleteError("Couldn't delete this unit. Try again.");
+    } finally {
+      setDeletingUnit(false);
     }
   };
 
@@ -79,14 +112,14 @@ function Subject({ subjects, onRemoveSubject }) {
             Dashboard
           </Link>
 
-          <Button
-            variant="danger"
-            size="sm"
+          <button
+            type="button"
             onClick={() => setConfirmOpen(true)}
+            className="inline-flex items-center gap-1.5 text-[13px] text-ink-faint hover:text-danger"
           >
             <Trash2 className="h-3.5 w-3.5" />
             Delete subject
-          </Button>
+          </button>
         </div>
 
         <h1
@@ -100,21 +133,16 @@ function Subject({ subjects, onRemoveSubject }) {
 
         <form
           onSubmit={handleUpload}
-          className="mt-6 flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 sm:flex-row sm:items-end"
+          className="relative z-10 mt-6 flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 sm:flex-row sm:items-end"
         >
           <div className="flex-1">
             <label className="mb-1.5 block text-[13px] font-medium text-ink-dim">Unit</label>
-            <select
+            <UnitSelect
+              units={units}
               value={selectedUnit}
-              onChange={(e) => setSelectedUnit(e.target.value)}
-              className="w-full rounded-lg border border-border bg-bg-alt/60 px-3.5 py-2.5 text-[15px] text-ink outline-none focus:border-accent"
-            >
-              {units.map((unit) => (
-                <option key={unit.id} value={unit.id}>
-                  {unit.name}
-                </option>
-              ))}
-            </select>
+              onChange={setSelectedUnit}
+              onAddUnit={() => setAddUnitOpen(true)}
+            />
           </div>
 
           <div className="flex-1">
@@ -138,37 +166,72 @@ function Subject({ subjects, onRemoveSubject }) {
         >
           Uploaded notes
         </h3>
-        <div className="mt-3 space-y-5">
-          {units.map((unit) => {
-            const unitNotes = notes.filter((n) => n.unit === unit.id);
-            return (
-              <div key={unit.id}>
-                <p
-                  className="text-[11px] font-medium uppercase tracking-[0.12em] text-ink-faint"
-                  style={{ fontFamily: "var(--font-mono)" }}
+        <div className="mt-3 flex flex-col gap-3">
+          {units.length === 0 ? (
+            <p className="text-[13px] text-ink-faint">
+              No units yet. Add a unit to start uploading notes.
+            </p>
+          ) : (
+            units.map((unit) => {
+              const unitNotes = notes.filter((n) => n.unit === unit.id);
+              return (
+                <div
+                  key={unit.id}
+                  className="relative rounded-xl border border-border bg-surface p-5"
                 >
-                  {unit.name}
-                </p>
-                {unitNotes.length === 0 ? (
-                  <p className="mt-1.5 text-[13px] text-ink-faint">No files uploaded yet.</p>
-                ) : (
-                  <ul className="mt-1.5 space-y-1.5">
-                    {unitNotes.map((n, index) => (
-                      <li
-                        key={index}
-                        className="flex items-center gap-2 text-[14px] text-ink-dim"
-                      >
-                        <FileText className="h-3.5 w-3.5 shrink-0 text-teal" />
-                        {n.fileName}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            );
-          })}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${unit.name}`}
+                    onClick={() => setUnitToDelete(unit)}
+                    className="absolute right-3 top-3 rounded-md p-1.5 text-ink-faint hover:bg-danger/10 hover:text-danger"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+
+                  <div className="flex items-center gap-2.5 pr-8">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-soft text-teal">
+                      <Layers className="h-4 w-4" />
+                    </span>
+                    <p
+                      className="text-[15px] text-ink"
+                      style={{ fontFamily: "var(--font-display)" }}
+                    >
+                      {unit.name}
+                    </p>
+                  </div>
+
+                  <div className="mt-3 flex flex-col">
+                    {unitNotes.length === 0 ? (
+                      <p className="px-2.5 py-2 text-[13px] text-ink-faint">
+                        No files uploaded yet.
+                      </p>
+                    ) : (
+                      unitNotes.map((n, index) => (
+                        <a
+                          key={index}
+                          href={n.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-[14px] text-ink-dim transition-colors hover:bg-surface-hover hover:text-ink"
+                        >
+                          <FileText className="h-3.5 w-3.5 shrink-0 text-teal" />
+                          {n.fileName}
+                        </a>
+                      ))
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
+
+      <AddUnitModal
+        open={addUnitOpen}
+        onClose={() => setAddUnitOpen(false)}
+        onAdd={handleAddUnit}
+      />
 
       {confirmOpen && (
         <div
@@ -207,6 +270,50 @@ function Subject({ subjects, onRemoveSubject }) {
                 variant="danger"
                 onClick={handleDelete}
                 loading={deleting}
+              >
+                Yes, delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {unitToDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+          onClick={() => !deletingUnit && setUnitToDelete(null)}
+        >
+          <div
+            className="w-full max-w-[400px] rounded-xl border border-border bg-surface p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              className="text-[1.2rem] text-ink"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              Delete "{unitToDelete.name}"?
+            </h3>
+            <p className="mt-2 text-[14px] text-ink-dim">
+              This will permanently delete this unit and its uploaded notes. This can't be undone.
+            </p>
+
+            {unitDeleteError && (
+              <p className="mt-2 text-[13px] text-danger">{unitDeleteError}</p>
+            )}
+
+            <div className="mt-5 flex justify-end gap-2.5">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setUnitToDelete(null)}
+                disabled={deletingUnit}
+              >
+                No, cancel
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                onClick={handleConfirmRemoveUnit}
+                loading={deletingUnit}
               >
                 Yes, delete
               </Button>

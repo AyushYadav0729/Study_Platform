@@ -17,9 +17,6 @@ function SubjectCard({ subject }) {
         >
           {subject.name}
         </h3>
-        <p className="mt-1 text-[13px] text-ink-faint">
-          {subject.moduleCount ? `${subject.moduleCount} modules` : "No modules yet"}
-        </p>
       </div>
 
       <div className="mt-6 flex items-center gap-1 text-[13px] font-medium text-ink-dim group-hover:text-accent">
