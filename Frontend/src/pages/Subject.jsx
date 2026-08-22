@@ -1,16 +1,17 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import api from "../services/authService";
 import { ArrowLeft, Upload, FileText, Trash2 } from "lucide-react";
 import Button from "../components/ui/Button";
 
-const UNITS = ["Unit 1", "Unit 2", "Unit 3", "Unit 4", "Unit 5"];
 
 function Subject({ subjects, onRemoveSubject }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const subject = subjects.find((s) => s.id === id);
 
-  const [selectedUnit, setSelectedUnit] = useState(UNITS[0]);
+  const [units, setUnits] = useState([]);
+  const [selectedUnit, setSelectedUnit] = useState("");
   const [notes, setNotes] = useState([]);
   const [file, setFile] = useState(null);
 
@@ -18,6 +19,22 @@ function Subject({ subjects, onRemoveSubject }) {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
 
+  useEffect(() => {
+  const fetchUnits = async () => {
+    try {
+      const response = await api.get(`/subjects/${id}/units`);
+      setUnits(response.data);
+
+      if (response.data.length > 0) {
+        setSelectedUnit(response.data[0].id);
+      }
+    } catch (error) {
+      console.error("Failed to fetch units:", error);
+    }
+  };
+
+  fetchUnits();
+  }, [id]);
   const handleUpload = (e) => {
     e.preventDefault();
     if (!file) return;
@@ -92,8 +109,10 @@ function Subject({ subjects, onRemoveSubject }) {
               onChange={(e) => setSelectedUnit(e.target.value)}
               className="w-full rounded-lg border border-border bg-bg-alt/60 px-3.5 py-2.5 text-[15px] text-ink outline-none focus:border-accent"
             >
-              {UNITS.map((unit) => (
-                <option key={unit} value={unit}>{unit}</option>
+              {units.map((unit) => (
+                <option key={unit.id} value={unit.id}>
+                  {unit.name}
+                </option>
               ))}
             </select>
           </div>
@@ -120,15 +139,15 @@ function Subject({ subjects, onRemoveSubject }) {
           Uploaded notes
         </h3>
         <div className="mt-3 space-y-5">
-          {UNITS.map((unit) => {
-            const unitNotes = notes.filter((n) => n.unit === unit);
+          {units.map((unit) => {
+            const unitNotes = notes.filter((n) => n.unit === unit.id);
             return (
-              <div key={unit}>
+              <div key={unit.id}>
                 <p
                   className="text-[11px] font-medium uppercase tracking-[0.12em] text-ink-faint"
                   style={{ fontFamily: "var(--font-mono)" }}
                 >
-                  {unit}
+                  {unit.name}
                 </p>
                 {unitNotes.length === 0 ? (
                   <p className="mt-1.5 text-[13px] text-ink-faint">No files uploaded yet.</p>
