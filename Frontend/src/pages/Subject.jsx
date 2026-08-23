@@ -31,26 +31,117 @@ function Subject({ subjects, onRemoveSubject }) {
   const fetchUnits = async () => {
     try {
       const response = await api.get(`/subjects/${id}/units`);
+
+      console.log("UNITS FROM BACKEND:", response.data);
+
       setUnits(response.data);
 
       if (response.data.length > 0) {
         setSelectedUnit(response.data[0].id);
       }
+
+      const allNotes = [];
+
+      for (const unit of response.data) {
+        const notesResponse = await api.get(
+          `/units/${unit.id}/notes`
+        );
+
+        console.log(
+          `NOTES FOR ${unit.name}:`,
+          notesResponse.data
+        );
+
+        notesResponse.data.forEach((note) => {
+          allNotes.push({
+            unit: note.unit_id,
+            fileName: note.file_name,
+            filePath: note.file_path,
+            fileType: note.file_type,
+            id: note.id,
+          });
+        });
+      }
+
+      setNotes(allNotes);
+
     } catch (error) {
-      console.error("Failed to fetch units:", error);
+      console.error("FAILED:", error);
     }
   };
 
   fetchUnits();
-  }, [id]);
-  const handleUpload = (e) => {
-    e.preventDefault();
-    if (!file) return;
+}, [id]);
 
-    setNotes((prev) => [...prev, { unit: selectedUnit, fileName: file.name, url: URL.createObjectURL(file) }]);
+const fetchNotesForUnit = async (unitId) => {
+  try {
+    console.log("REFETCHING NOTES FOR:", unitId);
+
+    const response = await api.get(
+      `/units/${unitId}/notes`
+    );
+
+    console.log("REFETCHED NOTES:", response.data);
+
+    const newNotes = response.data.map((note) => ({
+      id: note.id,
+      unit: note.unit_id,
+      fileName: note.file_name,
+      filePath: note.file_path,
+      fileType: note.file_type,
+    }));
+
+    setNotes((prev) => {
+      const otherNotes = prev.filter(
+        (note) => note.unit !== unitId
+      );
+
+      return [...otherNotes, ...newNotes];
+    });
+
+  } catch (error) {
+    console.error("FAILED TO REFETCH NOTES:", error);
+  }
+};
+
+const handleUpload = async (e) => {
+  e.preventDefault();
+
+  if (!file || !selectedUnit) return;
+
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    await api.post(
+      `/units/${selectedUnit}/notes`,
+      formData
+    );
+
+    console.log("UPLOAD FINISHED, NOW REFETCHING");
+
+    await fetchNotesForUnit(selectedUnit);
+
     setFile(null);
     e.target.reset();
-  };
+
+  } catch (error) {
+    console.error("UPLOAD ERROR:", error);
+  }
+};
+
+const handleDeleteNote = async (noteId) => {
+  try {
+    await api.delete(`/notes/${noteId}`);
+
+    setNotes((prev) =>
+      prev.filter((note) => note.id !== noteId)
+    );
+  } catch (error) {
+    console.error("Failed to delete note:", error);
+    alert("Failed to delete file. Please try again.");
+  }
+};
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -88,7 +179,7 @@ function Subject({ subjects, onRemoveSubject }) {
       setDeletingUnit(false);
     }
   };
-
+ 
   if (!subject) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-bg text-ink">
@@ -206,18 +297,27 @@ function Subject({ subjects, onRemoveSubject }) {
                         No files uploaded yet.
                       </p>
                     ) : (
-                      unitNotes.map((n, index) => (
-                        <a
-                          key={index}
-                          href={n.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-[14px] text-ink-dim transition-colors hover:bg-surface-hover hover:text-ink"
+                      unitNotes.map((n) => (
+                      <div
+                          key={n.id}
+                          className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-[14px] text-ink-dim hover:bg-surface-hover"
                         >
-                          <FileText className="h-3.5 w-3.5 shrink-0 text-teal" />
+                        <FileText className="h-3.5 w-3.5 shrink-0 text-teal" />
+
+                        <span className="flex-1 truncate">    
                           {n.fileName}
-                        </a>
-                      ))
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteNote(n.id)}
+                          className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-ink-faint hover:bg-danger/10 hover:text-danger"
+                          title="Delete file"
+                          >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))
                     )}
                   </div>
                 </div>
