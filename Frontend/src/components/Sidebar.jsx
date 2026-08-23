@@ -3,9 +3,11 @@ import { NavLink } from "react-router-dom";
 import { LayoutGrid, Plus, LogOut, BookOpen } from "lucide-react";
 import Logo from "./ui/Logo";
 import AddSubjectModal from "./AddSubjectModal";
+import ConfirmDialog from "./ui/ConfirmDialog";
 
 function Sidebar({ subjects, onAddSubject, user, onLogout }) {
   const [modalOpen, setModalOpen] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
 
   const initials = user?.name
     ? user.name
@@ -96,7 +98,7 @@ function Sidebar({ subjects, onAddSubject, user, onLogout }) {
         </div>
         <button
           type="button"
-          onClick={onLogout}
+          onClick={() => setLogoutConfirmOpen(true)} 
           aria-label="Log out"
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink-faint transition-colors hover:bg-danger-soft hover:text-danger"
         >
@@ -108,6 +110,19 @@ function Sidebar({ subjects, onAddSubject, user, onLogout }) {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         onAdd={onAddSubject}
+      />
+
+      <ConfirmDialog
+        open={logoutConfirmOpen}
+        title="Are you sure you want to log out?"
+        confirmLabel="Yes"
+        cancelLabel="No"
+        danger
+        onCancel={() => setLogoutConfirmOpen(false)}
+        onConfirm={() => {
+          setLogoutConfirmOpen(false);
+          onLogout();
+        }}
       />
     </div>
   );
