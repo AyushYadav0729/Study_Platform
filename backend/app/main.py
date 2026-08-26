@@ -1,5 +1,6 @@
-from fastapi import Depends, FastAPI, HTTPException, status, File, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, status, File, UploadFile, Form
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,10 +20,14 @@ from app.schemas import (
     SubjectResponse,
     UnitCreate,
     UnitResponse,
-    NoteResponse
+    NoteResponse,
+    SyllabusResponse
 )
 from app.auth import get_current_user
+from app.text_extractor import extract_text
+from app.gemini_client import stream_parse_syllabus
 from uuid import UUID
+import json
 
 app = FastAPI()
 app.add_middleware(
@@ -352,4 +357,96 @@ def about():
         "project": "All In One Study Platform",
         "version": "1.0",
         "developer": "Team : Ayush , Dhruv , Mridul , Meghavani "                           
+    }
+
+@app.post("/subjects/{subject_id}/syllabus/stream")
+def upload_syllabus_stream(
+    subject_id: UUID,
+    text: str = Form(None),
+    file: UploadFile = File(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    subject = db.query(Subject).filter(
+        Subject.id == subject_id, Subject.user_id == current_user.id
+    ).first()
+    if subject is None:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    if file is not None:
+        raw_text = extract_text(file.file.read(), file.content_type)
+    elif text is not None:
+        raw_text = text
+    else:
+        raise HTTPException(status_code=400, detail="Provide either text or file")
+
+    def event_stream():
+        all_modules = []
+        unparsed_lines = []
+        confidence = "medium"
+        buffer = ""
+        try:
+            for chunk in stream_parse_syllabus(raw_text):
+                buffer += chunk
+                while "\n" in buffer:
+                    line, buffer = buffer.split("\n", 1)
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+
+                    if obj.get("type") == "module":
+                        module = obj["data"]
+                        all_modules.append(module)
+
+                        unit = Unit(name=module["title"], subject_id=subject.id)
+                        db.add(unit)
+                        db.commit()
+                        db.refresh(unit)
+
+                        yield f"data: {json.dumps({'type': 'module', 'unit_id': str(unit.id), 'module': module})}\n\n"
+
+                    elif obj.get("type") == "meta":
+                        confidence = obj["data"].get("parse_confidence", confidence)
+                        unparsed_lines = obj["data"].get("unparsed_lines", [])
+
+        except Exception as e:
+            subject.syllabus_status = "failed"
+            db.commit()
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            return
+
+        subject.syllabus_json = {
+            "modules": all_modules,
+            "parse_confidence": confidence,
+            "unparsed_lines": unparsed_lines,
+        }
+        subject.syllabus_status = "parsed"
+        db.commit()
+
+        yield f"data: {json.dumps({'type': 'done', 'parse_confidence': confidence, 'unparsed_lines': unparsed_lines})}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@app.get("/subjects/{subject_id}/syllabus", response_model=SyllabusResponse)
+def get_syllabus(
+    subject_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    subject = db.query(Subject).filter(
+        Subject.id == subject_id,
+        Subject.user_id == current_user.id
+    ).first()
+    if subject is None:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    return {
+        "subject_id": subject.id,
+        "syllabus_status": subject.syllabus_status,
+        "parsed_json": subject.syllabus_json
     }

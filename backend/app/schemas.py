@@ -64,3 +64,12 @@ class NoteResponse(BaseModel):
     model_config = {
         "from_attributes": True
     }
+
+class SyllabusResponse(BaseModel):
+    subject_id: UUID
+    syllabus_status: str
+    parsed_json: dict | None
+
+    model_config = {
+        "from_attributes": True
+    }

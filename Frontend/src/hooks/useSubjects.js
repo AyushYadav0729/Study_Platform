@@ -26,11 +26,25 @@ export function useSubjects() {
   }, [refreshSubjects]);
 
   const addSubject = useCallback(async (name, syllabus) => {
-    const subject = await subjectsService.create(name, syllabus);
+    const subject = await subjectsService.create(name);
+    let finalSubject = subject;
 
-    setSubjects((prev) => [...prev, subject]);
+    if (syllabus) {
+      try {
+        const result = await subjectsService.addSyllabus(subject.id, syllabus);
+        finalSubject = {
+          ...subject,
+          syllabus_status: result.syllabus_status,
+          parsed_json: result.parsed_json,
+        };
+      } catch (error) {
+        console.error("Syllabus parsing failed:", error);
+        finalSubject = { ...subject, syllabus_status: false };
+      }
+    }
 
-    return subject;
+    setSubjects((prev) => [...prev, finalSubject]);
+    return finalSubject;
   }, []);
 
   const removeSubject = useCallback(async (id) => {
