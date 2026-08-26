@@ -1,7 +1,7 @@
 # this defines how we will write the data in signup database 
 from sqlalchemy import Column, String, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 import uuid
 from datetime import datetime
 
@@ -39,6 +39,10 @@ class Subject(Base):
         DateTime(timezone=True),
         default=datetime.utcnow
     )
+
+    syllabus_json = Column(JSONB, nullable=True)
+
+    syllabus_status = Column(String, default="not_uploaded")
 
     owner = relationship("User", back_populates="subjects")
 

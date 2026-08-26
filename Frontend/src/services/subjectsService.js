@@ -6,12 +6,15 @@ export const subjectsService = {
     return response.data;
   },
 
-  create: async (name, syllabus) => {
-    const response = await api.post("/subjects", {
-      name: name,
-      ...(syllabus ? { syllabus } : {}),
-    });
+  create: async (name) => {
+    const response = await api.post("/subjects", { name });
+    return response.data;
+  },
 
+  addSyllabus: async (subjectId, text) => {
+    const formData = new FormData();
+    formData.append("text", text);
+    const response = await api.post(`/subjects/${subjectId}/syllabus/stream`, formData);
     return response.data;
   },
 
