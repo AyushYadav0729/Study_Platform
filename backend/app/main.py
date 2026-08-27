@@ -374,6 +374,8 @@ def upload_syllabus_stream(
         raise HTTPException(status_code=404, detail="Subject not found")
 
     if file is not None:
+        if file.content_type != "application/pdf":
+            raise HTTPException(status_code=400, detail="Only PDF files are supported")
         raw_text = extract_text(file.file.read(), file.content_type)
     elif text is not None:
         raw_text = text

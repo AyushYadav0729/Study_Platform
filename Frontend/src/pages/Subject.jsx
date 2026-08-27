@@ -1,14 +1,15 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api from "../services/authService";
 import subjectsService from "../services/subjectsService";
-import { ArrowLeft, Upload, FileText, Trash2, Plus, ChevronDown, X, Layers } from "lucide-react";
+import { takePendingSyllabus } from "../utils/pendingSyllabusStore";
+import { ArrowLeft, Upload, FileText, Trash2, Plus, ChevronDown, X, Layers, Sparkles } from "lucide-react";
 import Button from "../components/ui/Button";
 import AddUnitModal from "../components/AddUnitModal";
 import UnitSelect from "../components/ui/UnitSelect";
 
 
-function Subject({ subjects, onRemoveSubject }) {
+function Subject({ subjects, onRemoveSubject, onUpdateSubject }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const subject = subjects.find((s) => s.id === id);
@@ -18,6 +19,10 @@ function Subject({ subjects, onRemoveSubject }) {
   const [notes, setNotes] = useState([]);
   const [file, setFile] = useState(null);
   const [addUnitOpen, setAddUnitOpen] = useState(false);
+
+  const [syllabusStreaming, setSyllabusStreaming] = useState(false);
+  const [syllabusError, setSyllabusError] = useState("");
+  const [freshUnitIds, setFreshUnitIds] = useState(new Set());
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -71,6 +76,60 @@ function Subject({ subjects, onRemoveSubject }) {
   };
 
   fetchUnits();
+}, [id]);
+
+const syllabusCancelledRef = useRef(false);
+
+useEffect(() => {
+  // React StrictMode double-invokes this effect in dev: mount, cleanup, mount
+  // again. takePendingSyllabus() is destructive (one-shot), so only the first
+  // invocation ever finds the payload and starts the real stream; the
+  // synthetic cleanup between the two mounts must not be allowed to silence
+  // its events. Resetting the ref at the top of every invocation undoes that
+  // phantom cancellation, while a real unmount/id-change (no further
+  // invocation to reset it) still cancels for good.
+  syllabusCancelledRef.current = false;
+
+  const pending = takePendingSyllabus(id);
+  if (pending) {
+    setSyllabusStreaming(true);
+    setSyllabusError("");
+
+    subjectsService
+      .streamSyllabus(id, pending, (event) => {
+        if (syllabusCancelledRef.current) return;
+
+        if (event.type === "module") {
+          const unit = { id: event.unit_id, name: event.module.title };
+          setUnits((prev) => [...prev, unit]);
+          setSelectedUnit((prev) => prev || unit.id);
+          setFreshUnitIds((prev) => new Set(prev).add(unit.id));
+          setTimeout(() => {
+            setFreshUnitIds((prev) => {
+              const next = new Set(prev);
+              next.delete(unit.id);
+              return next;
+            });
+          }, 1500);
+        } else if (event.type === "done") {
+          setSyllabusStreaming(false);
+          onUpdateSubject?.(id, { syllabus_status: "parsed" });
+        } else if (event.type === "error") {
+          setSyllabusStreaming(false);
+          setSyllabusError("Couldn't generate units from that syllabus.");
+          onUpdateSubject?.(id, { syllabus_status: "failed" });
+        }
+      })
+      .catch(() => {
+        if (syllabusCancelledRef.current) return;
+        setSyllabusStreaming(false);
+        setSyllabusError("Couldn't generate units from that syllabus.");
+      });
+  }
+
+  return () => {
+    syllabusCancelledRef.current = true;
+  };
 }, [id]);
 
 const fetchNotesForUnit = async (unitId) => {
@@ -220,6 +279,25 @@ const handleDeleteNote = async (noteId) => {
           {subject.name}
         </h1>
 
+        {syllabusStreaming && (
+          <div className="mt-6 rounded-xl border border-accent/30 bg-accent/5 px-4 py-3">
+            <div className="flex items-center gap-3 text-[13px] text-ink-dim">
+              <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+                <span className="syllabus-ring absolute inset-0 rounded-full" />
+                <Sparkles className="h-2.5 w-2.5 text-accent" />
+              </span>
+              Reading your syllabus and writing out units…
+            </div>
+            <div className="syllabus-progress mt-3" />
+          </div>
+        )}
+
+        {syllabusError && (
+          <div className="mt-6 rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-[13px] text-danger">
+            {syllabusError}
+          </div>
+        )}
+
         {/* ... rest of the upload form / notes list stays exactly the same ... */}
 
         <form
@@ -265,10 +343,15 @@ const handleDeleteNote = async (noteId) => {
           ) : (
             units.map((unit) => {
               const unitNotes = notes.filter((n) => n.unit === unit.id);
+              const isFresh = freshUnitIds.has(unit.id);
               return (
                 <div
                   key={unit.id}
-                  className="relative rounded-xl border border-border bg-surface p-5"
+                  className={`relative rounded-xl border p-5 transition-colors duration-700 ${
+                    isFresh
+                      ? "unit-enter border-accent/60 bg-accent/5"
+                      : "border-border bg-surface"
+                  }`}
                 >
                   <button
                     type="button"

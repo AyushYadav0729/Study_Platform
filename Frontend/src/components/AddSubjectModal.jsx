@@ -1,18 +1,27 @@
-import { useState, useEffect } from "react";
-import { X } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { X, Upload } from "lucide-react";
 import Input from "./ui/Input";
 import Button from "./ui/Button";
+import { setPendingSyllabus } from "../utils/pendingSyllabusStore";
 
 function AddSubjectModal({ open, onClose, onAdd }) {
+  const navigate = useNavigate();
   const [name, setName] = useState("");
   const [syllabus, setSyllabus] = useState("");
+  const [syllabusFile, setSyllabusFile] = useState(null);
+  const [fileError, setFileError] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const fileInputRef = useRef(null);
 
   const handleClose = () => {
     setName("");
     setSyllabus("");
+    setSyllabusFile(null);
+    setFileError("");
     setError("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
     onClose();
   };
 
@@ -21,6 +30,8 @@ function AddSubjectModal({ open, onClose, onAdd }) {
       if (e.key === "Escape") {
         setName("");
         setSyllabus("");
+        setSyllabusFile(null);
+        setFileError("");
         setError("");
         onClose();
       }
@@ -31,6 +42,24 @@ function AddSubjectModal({ open, onClose, onAdd }) {
 
   if (!open) return null;
 
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== "application/pdf") {
+      setFileError("Only PDF files are supported");
+      setSyllabusFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    setFileError("");
+    setSyllabusFile(file);
+  };
+
+  const handleRemoveFile = () => {
+    setSyllabusFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const trimmedName = name.trim();
@@ -40,8 +69,16 @@ function AddSubjectModal({ open, onClose, onAdd }) {
     }
     setSubmitting(true);
     try {
-      await onAdd(trimmedName, syllabus.trim() || undefined);
+      const subject = await onAdd(trimmedName);
+      const trimmedSyllabus = syllabus.trim();
+      if (syllabusFile || trimmedSyllabus) {
+        setPendingSyllabus(subject.id, {
+          text: syllabusFile ? undefined : trimmedSyllabus,
+          file: syllabusFile || undefined,
+        });
+      }
       handleClose();
+      navigate(`/subject/${subject.id}`);
     } catch {
       setError("Couldn't add that subject. Try again.");
     } finally {
@@ -90,21 +127,56 @@ function AddSubjectModal({ open, onClose, onAdd }) {
           />
 
           <div className="mb-4">
-            <label
-              htmlFor="syllabusText"
-              className="mb-1.5 block text-[13px] font-medium text-ink-dim"
-            >
-              Syllabus <span className="text-ink-faint">(optional)</span>
-            </label>
-            <textarea
-              id="syllabusText"
-              name="syllabusText"
-              rows={4}
-              placeholder="Paste your syllabus text directly from course page to help generate better summaries and quizzes"
-              value={syllabus}
-              onChange={(e) => setSyllabus(e.target.value)}
-              className="w-full resize-none rounded-lg border border-border bg-bg-alt/40 px-3.5 py-2.5 text-[15px] text-ink placeholder:text-ink-faint outline-none transition-colors focus:border-accent"
-            />
+            <div className="mb-1.5 flex items-center justify-between">
+              <label
+                htmlFor="syllabusText"
+                className="block text-[13px] font-medium text-ink-dim"
+              >
+                Syllabus <span className="text-ink-faint">(optional)</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-1 text-[13px] font-medium text-accent hover:opacity-80"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Upload PDF
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/pdf"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+            </div>
+
+            {syllabusFile ? (
+              <div className="flex items-center justify-between rounded-lg border border-border bg-bg-alt/40 px-3.5 py-2.5 text-[14px] text-ink">
+                <span className="truncate">{syllabusFile.name}</span>
+                <button
+                  type="button"
+                  onClick={handleRemoveFile}
+                  aria-label="Remove file"
+                  className="ml-2 shrink-0 rounded-md p-1 text-ink-faint hover:bg-surface-hover hover:text-ink"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <textarea
+                id="syllabusText"
+                name="syllabusText"
+                rows={4}
+                placeholder="Paste your syllabus text directly from course page to help generate better summaries and quizzes"
+                value={syllabus}
+                onChange={(e) => setSyllabus(e.target.value)}
+                className="w-full resize-none rounded-lg border border-border bg-bg-alt/40 px-3.5 py-2.5 text-[15px] text-ink placeholder:text-ink-faint outline-none transition-colors focus:border-accent"
+              />
+            )}
+            {fileError && (
+              <p className="mt-1.5 text-[13px] text-danger">{fileError}</p>
+            )}
           </div>
 
           <div className="mt-1 flex justify-end gap-2.5">
