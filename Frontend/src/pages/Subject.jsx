@@ -18,6 +18,7 @@ function Subject({ subjects, onRemoveSubject, onUpdateSubject }) {
   const [selectedUnit, setSelectedUnit] = useState("");
   const [notes, setNotes] = useState([]);
   const [file, setFile] = useState(null);
+  const [syllabusFile, setSyllabusFile] = useState(null);
   const [addUnitOpen, setAddUnitOpen] = useState(false);
 
   const [previewNote, setPreviewNote] = useState(null);
@@ -52,6 +53,20 @@ function Subject({ subjects, onRemoveSubject, onUpdateSubject }) {
       setPreviewError("Couldn't load this file.");
     } finally {
       setPreviewLoading(false);
+    }
+  };
+  const handleDownload = async (note) => {
+    try {
+      const response = await api.get(`/notes/${note.id}/preview`);
+
+      const link = document.createElement("a");
+      link.href = response.data.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.click();
+    } catch (error) {
+      console.error("Failed to download file:", error);
+      alert("Couldn't download this file.");
     }
   };
 
@@ -101,7 +116,69 @@ function Subject({ subjects, onRemoveSubject, onUpdateSubject }) {
   fetchUnits();
 }, [id]);
 
+const handleSyllabusUpload = async (e) => {
+   e.preventDefault();
 
+    if (!syllabusFile || syllabusStreaming) return;
+
+    setSyllabusStreaming(true);
+    setSyllabusError("");
+
+    try {
+      await subjectsService.streamSyllabus(
+        id,
+        { file: syllabusFile },
+        (event) => {
+          if (event.type === "module") {
+            const unit = {
+              id: event.unit_id,
+              name: event.module.title,
+            };
+
+            setUnits((prev) => [...prev, unit]);
+            setSelectedUnit((prev) => prev || unit.id);
+
+            setFreshUnitIds((prev) => new Set(prev).add(unit.id));
+
+            setTimeout(() => {
+              setFreshUnitIds((prev) => {
+                const next = new Set(prev);
+                next.delete(unit.id);
+                return next;
+              });
+            }, 1500);
+          }
+
+          else if (event.type === "done") {
+            setSyllabusStreaming(false);
+            setSyllabusFile(null);
+
+            onUpdateSubject?.(id, {
+              syllabus_status: "parsed",
+            });
+          }
+
+          else if (event.type === "error") {
+            console.error("SYLLABUS STREAM ERROR:", event.message);
+
+            setSyllabusStreaming(false);
+            setSyllabusError(
+              event.message || "Couldn't generate units from that syllabus."
+            );
+
+            onUpdateSubject?.(id, {
+              syllabus_status: "failed",
+            });
+          }
+        }
+      );
+    } catch (error) {
+      console.error("SYLLABUS UPLOAD ERROR:", error);
+
+      setSyllabusStreaming(false);
+      setSyllabusError("Couldn't generate units from that syllabus.");
+    }
+  };
 
 const syllabusCancelledRef = useRef(false);
 
@@ -114,7 +191,7 @@ useEffect(() => {
   // phantom cancellation, while a real unmount/id-change (no further
   // invocation to reset it) still cancels for good.
   syllabusCancelledRef.current = false;
-
+  
   const pending = takePendingSyllabus(id);
   if (pending) {
     setSyllabusStreaming(true);
@@ -140,8 +217,11 @@ useEffect(() => {
           setSyllabusStreaming(false);
           onUpdateSubject?.(id, { syllabus_status: "parsed" });
         } else if (event.type === "error") {
+          console.error("SYLLABUS STREAM ERROR:", event.message);
+
           setSyllabusStreaming(false);
-          setSyllabusError("Couldn't generate units from that syllabus.");
+          setSyllabusError(event.message || "Couldn't generate units from that syllabus.");
+
           onUpdateSubject?.(id, { syllabus_status: "failed" });
         }
       })
@@ -324,7 +404,31 @@ const handleDeleteNote = async (noteId) => {
         )}
 
         {/* ... rest of the upload form / notes list stays exactly the same ... */}
+        <form
+          onSubmit={handleSyllabusUpload}
+          className="relative z-10 mt-6 flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 sm:flex-row sm:items-end"
+        >
+          <div className="flex-1">
+            <label className="mb-1.5 block text-[13px] font-medium text-ink-dim">
+              Syllabus PDF
+            </label>
 
+            <input
+              type="file"
+              accept=".pdf,application/pdf"
+              onChange={(e) => setSyllabusFile(e.target.files[0])}
+              className="block w-full text-[13px] text-ink-faint file:mr-3 file:rounded-lg file:border-0 file:bg-bg-alt file:px-3 file:py-2 file:text-[13px] file:font-medium file:text-ink-dim hover:file:bg-surface-hover"
+            />
+          </div>
+
+          <Button
+            type="submit"
+            disabled={!syllabusFile || syllabusStreaming}
+          >
+            <Sparkles className="h-4 w-4" />
+            {syllabusStreaming ? "Parsing..." : "Upload & Parse"}
+          </Button>
+        </form>
         <form
           onSubmit={handleUpload}
           className="relative z-10 mt-6 flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 sm:flex-row sm:items-end"
@@ -407,10 +511,16 @@ const handleDeleteNote = async (noteId) => {
                     ) : (
                       unitNotes.map((n) => (
                         <div
-                          key={n.id}
-                          onClick={() => handlePreview(n)}
-                          className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-[14px] text-ink-dim hover:bg-surface-hover"
-                        >
+                        key={n.id}
+                        onClick={() => {
+                          if (n.fileType === "application/pdf") {
+                            handlePreview(n);
+                          } else {
+                            handleDownload(n);
+                          }
+                        }}
+                        className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-[14px] text-ink-dim hover:bg-surface-hover"
+                      >
                         <FileText className="h-3.5 w-3.5 shrink-0 text-teal" />
 
                         <span className="flex-1 truncate">    
