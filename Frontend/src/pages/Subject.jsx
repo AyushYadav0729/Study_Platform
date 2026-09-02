@@ -20,6 +20,11 @@ function Subject({ subjects, onRemoveSubject, onUpdateSubject }) {
   const [file, setFile] = useState(null);
   const [addUnitOpen, setAddUnitOpen] = useState(false);
 
+  const [previewNote, setPreviewNote] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState("");
+
   const [syllabusStreaming, setSyllabusStreaming] = useState(false);
   const [syllabusError, setSyllabusError] = useState("");
   const [freshUnitIds, setFreshUnitIds] = useState(new Set());
@@ -31,6 +36,24 @@ function Subject({ subjects, onRemoveSubject, onUpdateSubject }) {
   const [unitToDelete, setUnitToDelete] = useState(null);
   const [deletingUnit, setDeletingUnit] = useState(false);
   const [unitDeleteError, setUnitDeleteError] = useState("");
+
+  const handlePreview = async (note) => {
+    setPreviewNote(note);
+    setPreviewUrl("");
+    setPreviewError("");
+    setPreviewLoading(true);
+
+    try {
+      const response = await api.get(`/notes/${note.id}/preview`);
+
+      setPreviewUrl(response.data.url);
+    } catch (error) {
+      console.error("Failed to load preview:", error);
+      setPreviewError("Couldn't load this file.");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   useEffect(() => {
   const fetchUnits = async () => {
@@ -77,6 +100,8 @@ function Subject({ subjects, onRemoveSubject, onUpdateSubject }) {
 
   fetchUnits();
 }, [id]);
+
+
 
 const syllabusCancelledRef = useRef(false);
 
@@ -381,9 +406,10 @@ const handleDeleteNote = async (noteId) => {
                       </p>
                     ) : (
                       unitNotes.map((n) => (
-                      <div
+                        <div
                           key={n.id}
-                          className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-[14px] text-ink-dim hover:bg-surface-hover"
+                          onClick={() => handlePreview(n)}
+                          className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-[14px] text-ink-dim hover:bg-surface-hover"
                         >
                         <FileText className="h-3.5 w-3.5 shrink-0 text-teal" />
 
@@ -393,10 +419,13 @@ const handleDeleteNote = async (noteId) => {
 
                         <button
                           type="button"
-                          onClick={() => handleDeleteNote(n.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteNote(n.id);
+                          }}
                           className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-ink-faint hover:bg-danger/10 hover:text-danger"
                           title="Delete file"
-                          >
+                        >
                           <X className="h-3.5 w-3.5" />
                         </button>
                       </div>
@@ -456,6 +485,71 @@ const handleDeleteNote = async (noteId) => {
               >
                 Yes, delete
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {previewNote && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
+          onClick={() => {
+            setPreviewNote(null);
+            setPreviewUrl("");
+            setPreviewError("");
+          }}
+        >
+          <div
+            className="flex h-[85vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <FileText className="h-4 w-4 shrink-0 text-teal" />
+
+                <p className="truncate text-[14px] font-medium text-ink">
+                  {previewNote.fileName}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPreviewNote(null);
+                  setPreviewUrl("");
+                  setPreviewError("");
+                }}
+                className="ml-4 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink-faint hover:bg-surface-hover hover:text-ink"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Preview area */}
+            <div className="min-h-0 flex-1 bg-bg">
+              {previewLoading && (
+                <div className="flex h-full items-center justify-center">
+                  <p className="text-[13px] text-ink-faint">
+                    Loading preview...
+                  </p>
+                </div>
+              )}
+
+              {previewError && (
+                <div className="flex h-full items-center justify-center">
+                  <p className="text-[13px] text-danger">
+                    {previewError}
+                  </p>
+                </div>
+              )}
+
+              {previewUrl && !previewLoading && !previewError && (
+                <iframe
+                  src={previewUrl}
+                  title={previewNote.fileName}
+                  className="h-full w-full border-0"
+                />
+              )}
             </div>
           </div>
         </div>
