@@ -349,15 +349,43 @@ def delete_note(
     db.delete(note)
     db.commit()
 
+@app.get("/notes/{note_id}/preview")
+def preview_note(
+    note_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Verify that the note belongs to the current user
+    note = db.query(Note).join(Unit).join(Subject).filter(
+        Note.id == note_id,
+        Subject.user_id == current_user.id
+    ).first()
 
+    if note is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Note not found"
+        )
 
-@app.get("/about")
-def about():
-    return {
-        "project": "All In One Study Platform",
-        "version": "1.0",
-        "developer": "Team : Ayush , Dhruv , Mridul , Meghavani "                           
-    }
+    try:
+        # Create a temporary signed URL
+        response = supabase.storage.from_(SUPABASE_BUCKET).create_signed_url(
+            note.file_path,
+            3600
+        )
+
+        return {
+            "url": response["signedURL"],
+            "file_name": note.file_name,
+            "file_type": note.file_type
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Could not generate preview URL: {str(e)}"
+        )
+
 
 @app.post("/subjects/{subject_id}/syllabus/stream")
 def upload_syllabus_stream(
@@ -451,4 +479,16 @@ def get_syllabus(
         "subject_id": subject.id,
         "syllabus_status": subject.syllabus_status,
         "parsed_json": subject.syllabus_json
+    }
+
+
+
+
+
+@app.get("/about")
+def about():
+    return {
+        "project": "All In One Study Platform",
+        "version": "1.0",
+        "developer": "Team : Ayush , Dhruv , Mridul , Meghavani "                           
     }
