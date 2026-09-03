@@ -9,6 +9,7 @@ function AddUnitModal({ open, onClose, onAdd }) {
   const [submitting, setSubmitting] = useState(false);
 
   const handleClose = () => {
+    if (submitting) return;
     setName("");
     setError("");
     onClose();
@@ -16,7 +17,7 @@ function AddUnitModal({ open, onClose, onAdd }) {
 
   useEffect(() => {
     const handleKey = (e) => {
-      if (e.key === "Escape") {
+      if (e.key === "Escape" && !submitting) {
         setName("");
         setError("");
         onClose();
@@ -24,7 +25,7 @@ function AddUnitModal({ open, onClose, onAdd }) {
     };
     if (open) document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
-  }, [open, onClose]);
+  }, [open, onClose, submitting]);
 
   if (!open) return null;
 
@@ -65,8 +66,9 @@ function AddUnitModal({ open, onClose, onAdd }) {
           <button
             type="button"
             onClick={handleClose}
+            disabled={submitting}
             aria-label="Close"
-            className="rounded-md p-1 text-ink-faint hover:bg-surface-hover hover:text-ink"
+            className="rounded-md p-1 text-ink-faint hover:bg-surface-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
           >
             <X className="h-4 w-4" />
           </button>
@@ -84,9 +86,10 @@ function AddUnitModal({ open, onClose, onAdd }) {
               if (error) setError("");
             }}
             error={error}
+            disabled={submitting}
           />
           <div className="mt-1 flex justify-end gap-2.5">
-            <Button type="button" variant="ghost" onClick={handleClose}>
+            <Button type="button" variant="ghost" onClick={handleClose} disabled={submitting}>
               Cancel
             </Button>
             <Button type="submit" loading={submitting}>

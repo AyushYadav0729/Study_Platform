@@ -1,23 +1,36 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api from "../services/authService";
 import subjectsService from "../services/subjectsService";
-import { ArrowLeft, Upload, FileText, Trash2, Plus, ChevronDown, X, Layers } from "lucide-react";
+import { takePendingSyllabus } from "../utils/pendingSyllabusStore";
+import { ArrowLeft, Upload, FileText, Trash2, Plus, ChevronDown, X, Layers, Sparkles, Loader2 } from "lucide-react";
 import Button from "../components/ui/Button";
 import AddUnitModal from "../components/AddUnitModal";
 import UnitSelect from "../components/ui/UnitSelect";
 
 
-function Subject({ subjects, onRemoveSubject }) {
+function Subject({ subjects, onRemoveSubject, onUpdateSubject }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const subject = subjects.find((s) => s.id === id);
 
   const [units, setUnits] = useState([]);
+  const [unitsLoading, setUnitsLoading] = useState(true);
   const [selectedUnit, setSelectedUnit] = useState("");
   const [notes, setNotes] = useState([]);
   const [file, setFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [syllabusFile, setSyllabusFile] = useState(null);
   const [addUnitOpen, setAddUnitOpen] = useState(false);
+
+  const [previewNote, setPreviewNote] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState("");
+
+  const [syllabusStreaming, setSyllabusStreaming] = useState(false);
+  const [syllabusError, setSyllabusError] = useState("");
+  const [freshUnitIds, setFreshUnitIds] = useState(new Set());
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -27,8 +40,41 @@ function Subject({ subjects, onRemoveSubject }) {
   const [deletingUnit, setDeletingUnit] = useState(false);
   const [unitDeleteError, setUnitDeleteError] = useState("");
 
+  const handlePreview = async (note) => {
+    setPreviewNote(note);
+    setPreviewUrl("");
+    setPreviewError("");
+    setPreviewLoading(true);
+
+    try {
+      const response = await api.get(`/notes/${note.id}/preview`);
+
+      setPreviewUrl(response.data.url);
+    } catch (error) {
+      console.error("Failed to load preview:", error);
+      setPreviewError("Couldn't load this file.");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+  const handleDownload = async (note) => {
+    try {
+      const response = await api.get(`/notes/${note.id}/preview`);
+
+      const link = document.createElement("a");
+      link.href = response.data.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.click();
+    } catch (error) {
+      console.error("Failed to download file:", error);
+      alert("Couldn't download this file.");
+    }
+  };
+
   useEffect(() => {
   const fetchUnits = async () => {
+    setUnitsLoading(true);
     try {
       const response = await api.get(`/subjects/${id}/units`);
 
@@ -67,10 +113,133 @@ function Subject({ subjects, onRemoveSubject }) {
 
     } catch (error) {
       console.error("FAILED:", error);
+    } finally {
+      setUnitsLoading(false);
     }
   };
 
   fetchUnits();
+}, [id]);
+
+const handleSyllabusUpload = async (e) => {
+   e.preventDefault();
+
+    if (!syllabusFile || syllabusStreaming) return;
+
+    setSyllabusStreaming(true);
+    setSyllabusError("");
+
+    try {
+      await subjectsService.streamSyllabus(
+        id,
+        { file: syllabusFile },
+        (event) => {
+          if (event.type === "module") {
+            const unit = {
+              id: event.unit_id,
+              name: event.module.title,
+            };
+
+            setUnits((prev) => [...prev, unit]);
+            setSelectedUnit((prev) => prev || unit.id);
+
+            setFreshUnitIds((prev) => new Set(prev).add(unit.id));
+
+            setTimeout(() => {
+              setFreshUnitIds((prev) => {
+                const next = new Set(prev);
+                next.delete(unit.id);
+                return next;
+              });
+            }, 1500);
+          }
+
+          else if (event.type === "done") {
+            setSyllabusStreaming(false);
+            setSyllabusFile(null);
+
+            onUpdateSubject?.(id, {
+              syllabus_status: "parsed",
+            });
+          }
+
+          else if (event.type === "error") {
+            console.error("SYLLABUS STREAM ERROR:", event.message);
+
+            setSyllabusStreaming(false);
+            setSyllabusError(
+              event.message || "Couldn't generate units from that syllabus."
+            );
+
+            onUpdateSubject?.(id, {
+              syllabus_status: "failed",
+            });
+          }
+        }
+      );
+    } catch (error) {
+      console.error("SYLLABUS UPLOAD ERROR:", error);
+
+      setSyllabusStreaming(false);
+      setSyllabusError("Couldn't generate units from that syllabus.");
+    }
+  };
+
+const syllabusCancelledRef = useRef(false);
+
+useEffect(() => {
+  // React StrictMode double-invokes this effect in dev: mount, cleanup, mount
+  // again. takePendingSyllabus() is destructive (one-shot), so only the first
+  // invocation ever finds the payload and starts the real stream; the
+  // synthetic cleanup between the two mounts must not be allowed to silence
+  // its events. Resetting the ref at the top of every invocation undoes that
+  // phantom cancellation, while a real unmount/id-change (no further
+  // invocation to reset it) still cancels for good.
+  syllabusCancelledRef.current = false;
+  
+  const pending = takePendingSyllabus(id);
+  if (pending) {
+    setSyllabusStreaming(true);
+    setSyllabusError("");
+
+    subjectsService
+      .streamSyllabus(id, pending, (event) => {
+        if (syllabusCancelledRef.current) return;
+
+        if (event.type === "module") {
+          const unit = { id: event.unit_id, name: event.module.title };
+          setUnits((prev) => [...prev, unit]);
+          setSelectedUnit((prev) => prev || unit.id);
+          setFreshUnitIds((prev) => new Set(prev).add(unit.id));
+          setTimeout(() => {
+            setFreshUnitIds((prev) => {
+              const next = new Set(prev);
+              next.delete(unit.id);
+              return next;
+            });
+          }, 1500);
+        } else if (event.type === "done") {
+          setSyllabusStreaming(false);
+          onUpdateSubject?.(id, { syllabus_status: "parsed" });
+        } else if (event.type === "error") {
+          console.error("SYLLABUS STREAM ERROR:", event.message);
+
+          setSyllabusStreaming(false);
+          setSyllabusError(event.message || "Couldn't generate units from that syllabus.");
+
+          onUpdateSubject?.(id, { syllabus_status: "failed" });
+        }
+      })
+      .catch(() => {
+        if (syllabusCancelledRef.current) return;
+        setSyllabusStreaming(false);
+        setSyllabusError("Couldn't generate units from that syllabus.");
+      });
+  }
+
+  return () => {
+    syllabusCancelledRef.current = true;
+  };
 }, [id]);
 
 const fetchNotesForUnit = async (unitId) => {
@@ -107,7 +276,10 @@ const fetchNotesForUnit = async (unitId) => {
 const handleUpload = async (e) => {
   e.preventDefault();
 
-  if (!file || !selectedUnit) return;
+  if (!file || !selectedUnit || uploading) return;
+
+  setUploading(true);
+  const startTime = Date.now();
 
   try {
     const formData = new FormData();
@@ -127,6 +299,12 @@ const handleUpload = async (e) => {
 
   } catch (error) {
     console.error("UPLOAD ERROR:", error);
+  } finally {
+    const elapsed = Date.now() - startTime;
+    const remaining = Math.max(0, 800 - elapsed);
+
+    await new Promise((resolve) => setTimeout(resolve, remaining));
+    setUploading(false);
   }
 };
 
@@ -193,6 +371,16 @@ const handleDeleteNote = async (noteId) => {
 
   return (
     <div className="min-h-screen bg-bg">
+      {uploading && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60">
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-border bg-surface px-8 py-6 shadow-2xl">
+            <Loader2 className="h-7 w-7 animate-spin text-accent" />
+            <p className="text-[14px] text-ink-dim">
+              Uploading your file...
+            </p>
+          </div>
+        </div>
+      )}
       <div className="mx-auto max-w-4xl px-6 py-10 md:px-10">
         <div className="flex items-center justify-between">
           <Link
@@ -220,8 +408,53 @@ const handleDeleteNote = async (noteId) => {
           {subject.name}
         </h1>
 
-        {/* ... rest of the upload form / notes list stays exactly the same ... */}
+        {syllabusStreaming && (
+          <div className="mt-6 rounded-xl border border-accent/30 bg-accent/5 px-4 py-3">
+            <div className="flex items-center gap-3 text-[13px] text-ink-dim">
+              <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+                <span className="syllabus-ring absolute inset-0 rounded-full" />
+                <Sparkles className="h-2.5 w-2.5 text-accent" />
+              </span>
+              Reading your syllabus and writing out units…
+            </div>
+            <div className="syllabus-progress mt-3" />
+          </div>
+        )}
 
+        {syllabusError && (
+          <div className="mt-6 rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-[13px] text-danger">
+            {syllabusError}
+          </div>
+        )}
+
+        {/* ... rest of the upload form / notes list stays exactly the same ... */}
+        <form
+          onSubmit={handleSyllabusUpload}
+          className="relative z-10 mt-6 flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 sm:flex-row sm:items-end"
+        >
+          <div className="flex-1">
+            <label className="mb-1.5 block text-[13px] font-medium text-ink-dim">
+              Syllabus PDF
+            </label>
+
+            <input
+              type="file"
+              accept=".pdf,application/pdf"
+              onChange={(e) => setSyllabusFile(e.target.files[0])}
+              disabled={syllabusStreaming}
+              className="block w-full text-[13px] text-ink-faint file:mr-3 file:rounded-lg file:border-0 file:bg-bg-alt file:px-3 file:py-2 file:text-[13px] file:font-medium file:text-ink-dim hover:file:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          </div>
+
+          <Button
+            type="submit"
+            disabled={!syllabusFile || syllabusStreaming}
+            loading={syllabusStreaming}
+          >
+            {!syllabusStreaming && <Sparkles className="h-4 w-4" />}
+            {syllabusStreaming ? "Parsing..." : "Upload & Parse"}
+          </Button>
+        </form>
         <form
           onSubmit={handleUpload}
           className="relative z-10 mt-6 flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 sm:flex-row sm:items-end"
@@ -233,6 +466,7 @@ const handleDeleteNote = async (noteId) => {
               value={selectedUnit}
               onChange={setSelectedUnit}
               onAddUnit={() => setAddUnitOpen(true)}
+              disabled={uploading}
             />
           </div>
 
@@ -241,13 +475,14 @@ const handleDeleteNote = async (noteId) => {
             <input
               type="file"
               onChange={(e) => setFile(e.target.files[0])}
-              className="block w-full text-[13px] text-ink-faint file:mr-3 file:rounded-lg file:border-0 file:bg-bg-alt file:px-3 file:py-2 file:text-[13px] file:font-medium file:text-ink-dim hover:file:bg-surface-hover"
+              disabled={uploading}
+              className="block w-full text-[13px] text-ink-faint file:mr-3 file:rounded-lg file:border-0 file:bg-bg-alt file:px-3 file:py-2 file:text-[13px] file:font-medium file:text-ink-dim hover:file:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
             />
           </div>
 
-          <Button type="submit">
-            <Upload className="h-4 w-4" />
-            Upload
+          <Button type="submit" disabled={!file || !selectedUnit || uploading} loading={uploading}>
+            {!uploading && <Upload className="h-4 w-4" />}
+            {uploading ? "Uploading..." : "Upload"}
           </Button>
         </form>
 
@@ -258,17 +493,31 @@ const handleDeleteNote = async (noteId) => {
           Uploaded notes
         </h3>
         <div className="mt-3 flex flex-col gap-3">
-          {units.length === 0 ? (
+          {unitsLoading ? (
+            <div className="flex flex-col gap-3">
+              {[...Array(3)].map((_, i) => (
+                <div
+                  key={i}
+                  className="h-[92px] animate-pulse rounded-xl border border-border bg-surface"
+                />
+              ))}
+            </div>
+          ) : units.length === 0 ? (
             <p className="text-[13px] text-ink-faint">
               No units yet. Add a unit to start uploading notes.
             </p>
           ) : (
             units.map((unit) => {
               const unitNotes = notes.filter((n) => n.unit === unit.id);
+              const isFresh = freshUnitIds.has(unit.id);
               return (
                 <div
                   key={unit.id}
-                  className="relative rounded-xl border border-border bg-surface p-5"
+                  className={`relative rounded-xl border p-5 transition-colors duration-700 ${
+                    isFresh
+                      ? "unit-enter border-accent/60 bg-accent/5"
+                      : "border-border bg-surface"
+                  }`}
                 >
                   <button
                     type="button"
@@ -298,10 +547,17 @@ const handleDeleteNote = async (noteId) => {
                       </p>
                     ) : (
                       unitNotes.map((n) => (
-                      <div
-                          key={n.id}
-                          className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-[14px] text-ink-dim hover:bg-surface-hover"
-                        >
+                        <div
+                        key={n.id}
+                        onClick={() => {
+                          if (n.fileType === "application/pdf") {
+                            handlePreview(n);
+                          } else {
+                            handleDownload(n);
+                          }
+                        }}
+                        className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-[14px] text-ink-dim hover:bg-surface-hover"
+                      >
                         <FileText className="h-3.5 w-3.5 shrink-0 text-teal" />
 
                         <span className="flex-1 truncate">    
@@ -310,10 +566,13 @@ const handleDeleteNote = async (noteId) => {
 
                         <button
                           type="button"
-                          onClick={() => handleDeleteNote(n.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteNote(n.id);
+                          }}
                           className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-ink-faint hover:bg-danger/10 hover:text-danger"
                           title="Delete file"
-                          >
+                        >
                           <X className="h-3.5 w-3.5" />
                         </button>
                       </div>
@@ -373,6 +632,71 @@ const handleDeleteNote = async (noteId) => {
               >
                 Yes, delete
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {previewNote && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
+          onClick={() => {
+            setPreviewNote(null);
+            setPreviewUrl("");
+            setPreviewError("");
+          }}
+        >
+          <div
+            className="flex h-[85vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <FileText className="h-4 w-4 shrink-0 text-teal" />
+
+                <p className="truncate text-[14px] font-medium text-ink">
+                  {previewNote.fileName}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPreviewNote(null);
+                  setPreviewUrl("");
+                  setPreviewError("");
+                }}
+                className="ml-4 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink-faint hover:bg-surface-hover hover:text-ink"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Preview area */}
+            <div className="min-h-0 flex-1 bg-bg">
+              {previewLoading && (
+                <div className="flex h-full items-center justify-center">
+                  <p className="text-[13px] text-ink-faint">
+                    Loading preview...
+                  </p>
+                </div>
+              )}
+
+              {previewError && (
+                <div className="flex h-full items-center justify-center">
+                  <p className="text-[13px] text-danger">
+                    {previewError}
+                  </p>
+                </div>
+              )}
+
+              {previewUrl && !previewLoading && !previewError && (
+                <iframe
+                  src={previewUrl}
+                  title={previewNote.fileName}
+                  className="h-full w-full border-0"
+                />
+              )}
             </div>
           </div>
         </div>
