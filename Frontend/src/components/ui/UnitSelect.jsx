@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { ChevronDown, Check, Plus, Sparkles } from "lucide-react";
+export const AI_RECOMMEND_VALUE = "ai-recommended";
 
 function UnitSelect({ units, value, onChange, onAddUnit, placeholder = "No units yet", disabled = false }) {
   const [open, setOpen] = useState(false);
@@ -45,7 +46,7 @@ function UnitSelect({ units, value, onChange, onAddUnit, placeholder = "No units
 
       {open && (
         <div className="absolute z-50 mt-1.5 w-full overflow-hidden rounded-lg border border-border bg-surface shadow-xl">
-          {syllabusParsed && units.length > 0 && (
+          {units.length > 0 && (
             <button
               type="button"
               onClick={() => {
