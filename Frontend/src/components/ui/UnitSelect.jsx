@@ -1,9 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { ChevronDown, Check, Plus, Sparkles } from "lucide-react";
 
-export const AI_RECOMMEND_VALUE = "ai_recommend";
-
-function UnitSelect({ units, value, onChange, onAddUnit, syllabusParsed, placeholder = "No units yet" }) {
+function UnitSelect({ units, value, onChange, onAddUnit, placeholder = "No units yet", disabled = false }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);
 
@@ -31,8 +29,9 @@ function UnitSelect({ units, value, onChange, onAddUnit, syllabusParsed, placeho
     <div className="relative" ref={containerRef}>
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between rounded-lg border border-border bg-bg-alt/60 px-3.5 py-2.5 text-left text-[15px] text-ink outline-none transition-colors focus:border-accent hover:border-accent/40"
+        onClick={() => !disabled && setOpen((o) => !o)}
+        disabled={disabled}
+        className="flex w-full items-center justify-between rounded-lg border border-border bg-bg-alt/60 px-3.5 py-2.5 text-left text-[15px] text-ink outline-none transition-colors focus:border-accent hover:border-accent/40 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <span className={selectedUnit || isAiSelected ? "text-ink" : "text-ink-faint"}>
           {isAiSelected ? "AI recommendation" : selectedUnit ? selectedUnit.name : placeholder}

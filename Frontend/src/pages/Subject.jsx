@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import api from "../services/authService";
 import subjectsService from "../services/subjectsService";
 import { takePendingSyllabus } from "../utils/pendingSyllabusStore";
-import { ArrowLeft, Upload, FileText, Trash2, Plus, ChevronDown, X, Layers, Sparkles } from "lucide-react";
+import { ArrowLeft, Upload, FileText, Trash2, Plus, ChevronDown, X, Layers, Sparkles, Loader2 } from "lucide-react";
 import Button from "../components/ui/Button";
 import AddUnitModal from "../components/AddUnitModal";
 import UnitSelect, { AI_RECOMMEND_VALUE } from "../components/ui/UnitSelect";
@@ -15,9 +15,11 @@ function Subject({ subjects, onRemoveSubject, onUpdateSubject }) {
   const subject = subjects.find((s) => s.id === id);
 
   const [units, setUnits] = useState([]);
+  const [unitsLoading, setUnitsLoading] = useState(true);
   const [selectedUnit, setSelectedUnit] = useState("");
   const [notes, setNotes] = useState([]);
   const [file, setFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const [syllabusFile, setSyllabusFile] = useState(null);
   const [addUnitOpen, setAddUnitOpen] = useState(false);
 
@@ -72,6 +74,7 @@ function Subject({ subjects, onRemoveSubject, onUpdateSubject }) {
 
   useEffect(() => {
   const fetchUnits = async () => {
+    setUnitsLoading(true);
     try {
       const response = await api.get(`/subjects/${id}/units`);
 
@@ -112,6 +115,8 @@ function Subject({ subjects, onRemoveSubject, onUpdateSubject }) {
 
     } catch (error) {
       console.error("FAILED:", error);
+    } finally {
+      setUnitsLoading(false);
     }
   };
 
@@ -125,7 +130,6 @@ const handleSyllabusUpload = async (e) => {
 
     setSyllabusStreaming(true);
     setSyllabusError("");
-    setSelectedUnit(AI_RECOMMEND_VALUE);
 
     try {
       await subjectsService.streamSyllabus(
@@ -199,7 +203,6 @@ useEffect(() => {
   if (pending) {
     setSyllabusStreaming(true);
     setSyllabusError("");
-    setSelectedUnit(AI_RECOMMEND_VALUE);
 
     subjectsService
       .streamSyllabus(id, pending, (event) => {
@@ -275,7 +278,10 @@ const fetchNotesForUnit = async (unitId) => {
 const handleUpload = async (e) => {
   e.preventDefault();
 
-  if (!file || !selectedUnit) return;
+  if (!file || !selectedUnit || uploading) return;
+
+  setUploading(true);
+  const startTime = Date.now();
 
   try {
     const formData = new FormData();
@@ -300,6 +306,12 @@ const handleUpload = async (e) => {
 
   } catch (error) {
     console.error("UPLOAD ERROR:", error);
+  } finally {
+    const elapsed = Date.now() - startTime;
+    const remaining = Math.max(0, 800 - elapsed);
+
+    await new Promise((resolve) => setTimeout(resolve, remaining));
+    setUploading(false);
   }
 };
 
@@ -366,6 +378,16 @@ const handleDeleteNote = async (noteId) => {
 
   return (
     <div className="min-h-screen bg-bg">
+      {uploading && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60">
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-border bg-surface px-8 py-6 shadow-2xl">
+            <Loader2 className="h-7 w-7 animate-spin text-accent" />
+            <p className="text-[14px] text-ink-dim">
+              Uploading your file...
+            </p>
+          </div>
+        </div>
+      )}
       <div className="mx-auto max-w-4xl px-6 py-10 md:px-10">
         <div className="flex items-center justify-between">
           <Link
@@ -426,15 +448,17 @@ const handleDeleteNote = async (noteId) => {
               type="file"
               accept=".pdf,application/pdf"
               onChange={(e) => setSyllabusFile(e.target.files[0])}
-              className="block w-full text-[13px] text-ink-faint file:mr-3 file:rounded-lg file:border-0 file:bg-bg-alt file:px-3 file:py-2 file:text-[13px] file:font-medium file:text-ink-dim hover:file:bg-surface-hover"
+              disabled={syllabusStreaming}
+              className="block w-full text-[13px] text-ink-faint file:mr-3 file:rounded-lg file:border-0 file:bg-bg-alt file:px-3 file:py-2 file:text-[13px] file:font-medium file:text-ink-dim hover:file:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
             />
           </div>
 
           <Button
             type="submit"
             disabled={!syllabusFile || syllabusStreaming}
+            loading={syllabusStreaming}
           >
-            <Sparkles className="h-4 w-4" />
+            {!syllabusStreaming && <Sparkles className="h-4 w-4" />}
             {syllabusStreaming ? "Parsing..." : "Upload & Parse"}
           </Button>
         </form>
@@ -449,7 +473,7 @@ const handleDeleteNote = async (noteId) => {
               value={selectedUnit}
               onChange={setSelectedUnit}
               onAddUnit={() => setAddUnitOpen(true)}
-              syllabusParsed={subject.syllabus_status === "parsed"}
+              disabled={uploading}
             />
           </div>
 
@@ -458,13 +482,14 @@ const handleDeleteNote = async (noteId) => {
             <input
               type="file"
               onChange={(e) => setFile(e.target.files[0])}
-              className="block w-full text-[13px] text-ink-faint file:mr-3 file:rounded-lg file:border-0 file:bg-bg-alt file:px-3 file:py-2 file:text-[13px] file:font-medium file:text-ink-dim hover:file:bg-surface-hover"
+              disabled={uploading}
+              className="block w-full text-[13px] text-ink-faint file:mr-3 file:rounded-lg file:border-0 file:bg-bg-alt file:px-3 file:py-2 file:text-[13px] file:font-medium file:text-ink-dim hover:file:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
             />
           </div>
 
-          <Button type="submit">
-            <Upload className="h-4 w-4" />
-            Upload
+          <Button type="submit" disabled={!file || !selectedUnit || uploading} loading={uploading}>
+            {!uploading && <Upload className="h-4 w-4" />}
+            {uploading ? "Uploading..." : "Upload"}
           </Button>
         </form>
 
@@ -475,7 +500,16 @@ const handleDeleteNote = async (noteId) => {
           Uploaded notes
         </h3>
         <div className="mt-3 flex flex-col gap-3">
-          {units.length === 0 ? (
+          {unitsLoading ? (
+            <div className="flex flex-col gap-3">
+              {[...Array(3)].map((_, i) => (
+                <div
+                  key={i}
+                  className="h-[92px] animate-pulse rounded-xl border border-border bg-surface"
+                />
+              ))}
+            </div>
+          ) : units.length === 0 ? (
             <p className="text-[13px] text-ink-faint">
               No units yet. Add a unit to start uploading notes.
             </p>

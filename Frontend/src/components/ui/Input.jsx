@@ -13,6 +13,7 @@ function Input({
   autoComplete,
   autoFocus,
   icon: Icon,
+  disabled = false,
 }) {
   const [showPassword, setShowPassword] = useState(false);
   const isPassword = type === "password";
@@ -43,7 +44,8 @@ function Input({
           autoComplete={autoComplete}
           autoFocus={autoFocus}
           aria-invalid={!!error}
-          className={`w-full rounded-lg border bg-bg-alt/40 px-3.5 py-2.5 text-[15px] text-ink placeholder:text-ink-faint outline-none transition-colors ${
+          disabled={disabled}
+          className={`w-full rounded-lg border bg-bg-alt/40 px-3.5 py-2.5 text-[15px] text-ink placeholder:text-ink-faint outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
             Icon ? "pl-9" : ""
           } ${isPassword ? "pr-9" : ""} ${
             error
