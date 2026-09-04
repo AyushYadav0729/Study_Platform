@@ -6,7 +6,7 @@ import { takePendingSyllabus } from "../utils/pendingSyllabusStore";
 import { ArrowLeft, Upload, FileText, Trash2, Plus, ChevronDown, X, Layers, Sparkles } from "lucide-react";
 import Button from "../components/ui/Button";
 import AddUnitModal from "../components/AddUnitModal";
-import UnitSelect from "../components/ui/UnitSelect";
+import UnitSelect, { AI_RECOMMEND_VALUE } from "../components/ui/UnitSelect";
 
 
 function Subject({ subjects, onRemoveSubject, onUpdateSubject }) {
@@ -80,7 +80,9 @@ function Subject({ subjects, onRemoveSubject, onUpdateSubject }) {
       setUnits(response.data);
 
       if (response.data.length > 0) {
-        setSelectedUnit(response.data[0].id);
+        setSelectedUnit(
+          subject?.syllabus_status === "parsed" ? AI_RECOMMEND_VALUE : response.data[0].id
+        );
       }
 
       const allNotes = [];
@@ -123,6 +125,7 @@ const handleSyllabusUpload = async (e) => {
 
     setSyllabusStreaming(true);
     setSyllabusError("");
+    setSelectedUnit(AI_RECOMMEND_VALUE);
 
     try {
       await subjectsService.streamSyllabus(
@@ -196,6 +199,7 @@ useEffect(() => {
   if (pending) {
     setSyllabusStreaming(true);
     setSyllabusError("");
+    setSelectedUnit(AI_RECOMMEND_VALUE);
 
     subjectsService
       .streamSyllabus(id, pending, (event) => {
@@ -277,14 +281,19 @@ const handleUpload = async (e) => {
     const formData = new FormData();
     formData.append("file", file);
 
-    await api.post(
+    if (selectedUnit === AI_RECOMMEND_VALUE) {
+      formData.append("subject_id", id);
+    }
+
+    const response = await api.post(
       `/units/${selectedUnit}/notes`,
       formData
     );
 
     console.log("UPLOAD FINISHED, NOW REFETCHING");
 
-    await fetchNotesForUnit(selectedUnit);
+    const resolvedUnitId = response.data.unit_id;
+    await fetchNotesForUnit(resolvedUnitId);
 
     setFile(null);
     e.target.reset();
@@ -440,6 +449,7 @@ const handleDeleteNote = async (noteId) => {
               value={selectedUnit}
               onChange={setSelectedUnit}
               onAddUnit={() => setAddUnitOpen(true)}
+              syllabusParsed={subject.syllabus_status === "parsed"}
             />
           </div>
 

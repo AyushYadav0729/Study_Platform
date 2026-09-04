@@ -5,7 +5,7 @@ from app.config import GEMINI_API_KEY
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-SYSTEM_PROMPT = """You convert a raw college syllabus into structured data.
+SYLLABUS_PARSING_PROMPT = """You convert a raw college syllabus into structured data.
 
 Real syllabi come in inconsistent formats. You must handle at least these two patterns:
 
@@ -62,10 +62,47 @@ def stream_parse_syllabus(raw_text: str):
         model="gemini-3.6-flash",
         contents=raw_text,
         config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPT,
+            system_instruction=SYLLABUS_PARSING_PROMPT,
             temperature=0.1,
         ),
     )
     for chunk in response_stream:
         if chunk.text:
             yield chunk.text
+
+NOTE_CLASSIFICATION_PROMPT = """You are matching a student's uploaded notes document to the
+single best-fitting module from their course syllabus.
+
+You will be given: the parsed syllabus structure (modules with subtopics), a numbered
+list of the student's actual existing units to choose from, and the extracted text of
+the notes document.
+
+Pick exactly ONE unit that best matches the content, even if the match isn't perfect -
+always pick the closest one, never refuse to pick.
+
+Return ONLY valid JSON, no markdown fences, matching exactly:
+{"unit_index": <integer, 0-based index into the numbered unit list>}
+"""
+
+def classify_note_to_unit(note_text: str, syllabus_json: dict, unit_names: list[str]) -> int:
+    numbered_units = "\n".join(f"{i}: {name}" for i, name in enumerate(unit_names))
+    prompt = f"""SYLLABUS STRUCTURE:
+{json.dumps(syllabus_json)}
+
+EXISTING UNITS (choose by index):
+{numbered_units}
+
+NOTES DOCUMENT TEXT (may be truncated):
+{note_text[:8000]}
+"""
+    response = client.models.generate_content(
+        model="gemini-3.6-flash",
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=NOTE_CLASSIFICATION_PROMPT,
+            response_mime_type="application/json",
+            temperature=0.1,
+        ),
+    )
+    result = json.loads(response.text)
+    return result["unit_index"]
