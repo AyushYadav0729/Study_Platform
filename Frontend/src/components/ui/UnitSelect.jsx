@@ -1,11 +1,14 @@
 import { useState, useRef, useEffect } from "react";
-import { ChevronDown, Check, Plus } from "lucide-react";
+import { ChevronDown, Check, Plus, Sparkles } from "lucide-react";
 
-function UnitSelect({ units, value, onChange, onAddUnit, placeholder = "No units yet" }) {
+export const AI_RECOMMEND_VALUE = "ai_recommend";
+
+function UnitSelect({ units, value, onChange, onAddUnit, syllabusParsed, placeholder = "No units yet" }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);
 
   const selectedUnit = units.find((u) => u.id === value);
+  const isAiSelected = value === AI_RECOMMEND_VALUE;
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -31,8 +34,8 @@ function UnitSelect({ units, value, onChange, onAddUnit, placeholder = "No units
         onClick={() => setOpen((o) => !o)}
         className="flex w-full items-center justify-between rounded-lg border border-border bg-bg-alt/60 px-3.5 py-2.5 text-left text-[15px] text-ink outline-none transition-colors focus:border-accent hover:border-accent/40"
       >
-        <span className={selectedUnit ? "text-ink" : "text-ink-faint"}>
-          {selectedUnit ? selectedUnit.name : placeholder}
+        <span className={selectedUnit || isAiSelected ? "text-ink" : "text-ink-faint"}>
+          {isAiSelected ? "AI recommendation" : selectedUnit ? selectedUnit.name : placeholder}
         </span>
         <ChevronDown
           className={`h-4 w-4 shrink-0 text-ink-faint transition-transform ${
@@ -43,6 +46,23 @@ function UnitSelect({ units, value, onChange, onAddUnit, placeholder = "No units
 
       {open && (
         <div className="absolute z-50 mt-1.5 w-full overflow-hidden rounded-lg border border-border bg-surface shadow-xl">
+          {syllabusParsed && units.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                onChange(AI_RECOMMEND_VALUE);
+                setOpen(false);
+              }}
+              className="flex w-full items-center justify-between border-b border-border px-3.5 py-2.5 text-left text-[14px] font-medium text-accent transition-colors hover:bg-surface-hover"
+            >
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5" />
+                AI recommendation
+              </span>
+              {isAiSelected && <Check className="h-3.5 w-3.5 shrink-0" />}
+            </button>
+          )}
+          
           {units.length > 0 && (
             <ul className="max-h-56 overflow-y-auto py-1">
               {units.map((unit) => (

@@ -25,7 +25,7 @@ from app.schemas import (
 )
 from app.auth import get_current_user
 from app.text_extractor import extract_text
-from app.gemini_client import stream_parse_syllabus
+from app.gemini_client import stream_parse_syllabus, classify_note_to_unit
 from uuid import UUID
 import json
 
@@ -231,24 +231,47 @@ def delete_unit(
     status_code=status.HTTP_201_CREATED
 )
 def upload_note(
-    unit_id: UUID,
+    unit_id: str,
+    subject_id: str = Form(None),
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # 1. Verify that the unit belongs to the logged-in user
-    unit = db.query(Unit).join(Subject).filter(
-        Unit.id == unit_id,
-        Subject.user_id == current_user.id
-    ).first()
+    file_data = file.file.read()
 
-    if unit is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Unit not found"
-        )
+    if unit_id == "ai_recommend":
+        if subject_id is None:
+            raise HTTPException(status_code=400, detail="subject_id is required for AI recommendation")
 
-    # 2. Build the storage path
+        subject = db.query(Subject).filter(
+            Subject.id == subject_id, Subject.user_id == current_user.id
+        ).first()
+        if subject is None:
+            raise HTTPException(status_code=404, detail="Subject not found")
+        if not subject.syllabus_json:
+            raise HTTPException(status_code=400, detail="No syllabus parsed for this subject yet")
+
+        units = db.query(Unit).filter(Unit.subject_id == subject.id).all()
+        if not units:
+            raise HTTPException(status_code=400, detail="No units exist for this subject yet")
+
+        note_text = extract_text(file_data, file.content_type)
+        unit_names = [u.name for u in units]
+
+        try:
+            index = classify_note_to_unit(note_text, subject.syllabus_json, unit_names)
+            unit = units[index]
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"AI classification failed: {str(e)}")
+
+    else:
+        unit = db.query(Unit).join(Subject).filter(
+            Unit.id == unit_id,
+            Subject.user_id == current_user.id
+        ).first()
+        if unit is None:
+            raise HTTPException(status_code=404, detail="Unit not found")
+
     file_path = (
         f"users/{current_user.id}/"
         f"subjects/{unit.subject_id}/"
@@ -256,32 +279,19 @@ def upload_note(
         f"{file.filename}"
     )
 
-    # 3. Read the uploaded file
-    file_data = file.file.read()
-
-    # 4. Upload to Supabase Storage
     try:
         supabase.storage.from_(SUPABASE_BUCKET).upload(
-            file_path,
-            file_data,
-            {
-                "content-type": file.content_type
-            }
+            file_path, file_data, {"content-type": file.content_type}
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"File upload failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
 
-    # 5. Create Note database record
     new_note = Note(
         unit_id=unit.id,
         file_name=file.filename,
         file_path=file_path,
         file_type=file.content_type
     )
-
     db.add(new_note)
     db.commit()
     db.refresh(new_note)

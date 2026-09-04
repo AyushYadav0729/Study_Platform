@@ -36,6 +36,7 @@ class SubjectCreate(BaseModel):
 class SubjectResponse(BaseModel):
     id: UUID
     name: str
+    syllabus_status: str
 
     model_config = {
         "from_attributes": True
