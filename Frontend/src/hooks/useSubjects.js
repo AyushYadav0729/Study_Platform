@@ -25,12 +25,16 @@ export function useSubjects() {
     refreshSubjects();
   }, [refreshSubjects]);
 
-  const addSubject = useCallback(async (name, syllabus) => {
-    const subject = await subjectsService.create(name, syllabus);
-
+  const addSubject = useCallback(async (name) => {
+    const subject = await subjectsService.create(name);
     setSubjects((prev) => [...prev, subject]);
-
     return subject;
+  }, []);
+
+  const updateSubject = useCallback((id, patch) => {
+    setSubjects((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, ...patch } : s))
+    );
   }, []);
 
   const removeSubject = useCallback(async (id) => {
@@ -47,6 +51,7 @@ export function useSubjects() {
     subjects,
     loading,
     addSubject,
+    updateSubject,
     removeSubject,
     refreshSubjects,
     clearSubjects,

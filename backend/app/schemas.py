@@ -36,6 +36,7 @@ class SubjectCreate(BaseModel):
 class SubjectResponse(BaseModel):
     id: UUID
     name: str
+    syllabus_status: str
 
     model_config = {
         "from_attributes": True
@@ -49,6 +50,26 @@ class UnitResponse(BaseModel):
     id: UUID
     name: str
     subject_id: UUID
+
+    model_config = {
+        "from_attributes": True
+    }
+
+class NoteResponse(BaseModel):
+    id: UUID
+    unit_id: UUID
+    file_name: str
+    file_path: str
+    file_type: str
+
+    model_config = {
+        "from_attributes": True
+    }
+
+class SyllabusResponse(BaseModel):
+    subject_id: UUID
+    syllabus_status: str
+    parsed_json: dict | None
 
     model_config = {
         "from_attributes": True

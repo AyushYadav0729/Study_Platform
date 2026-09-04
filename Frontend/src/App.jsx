@@ -12,6 +12,7 @@ function App() {
   subjects,
   loading,
   addSubject,
+  updateSubject,
   refreshSubjects,
   removeSubject,
   clearSubjects,
@@ -54,7 +55,7 @@ function App() {
             path="/subject/:id"
             element={
               <ProtectedRoute>
-                 <Subject subjects={subjects} onRemoveSubject={removeSubject} />
+                 <Subject subjects={subjects} onRemoveSubject={removeSubject} onUpdateSubject={updateSubject} />
               </ProtectedRoute>
             }
           />

@@ -1,10 +1,13 @@
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, status, File, UploadFile, Form
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.models import User, Subject, Unit
+from app.supabase_client import supabase
+from app.models import User, Subject, Unit, Note
+from app.config import SUPABASE_BUCKET
 from app.database import engine, Base, get_db
 from app.security import hash_password, verify_password
 from app.jwt_handler import create_access_token
@@ -16,10 +19,15 @@ from app.schemas import (
     SubjectCreate,
     SubjectResponse,
     UnitCreate,
-    UnitResponse
+    UnitResponse,
+    NoteResponse,
+    SyllabusResponse
 )
 from app.auth import get_current_user
+from app.text_extractor import extract_text
+from app.gemini_client import stream_parse_syllabus, classify_note_to_unit
 from uuid import UUID
+import json
 
 app = FastAPI()
 app.add_middleware(
@@ -216,6 +224,276 @@ def delete_unit(
 
     db.delete(unit)
     db.commit()
+
+@app.post(
+    "/units/{unit_id}/notes",
+    response_model=NoteResponse,
+    status_code=status.HTTP_201_CREATED
+)
+def upload_note(
+    unit_id: str,
+    subject_id: str = Form(None),
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    file_data = file.file.read()
+
+    if unit_id == "ai_recommend":
+        if subject_id is None:
+            raise HTTPException(status_code=400, detail="subject_id is required for AI recommendation")
+
+        subject = db.query(Subject).filter(
+            Subject.id == subject_id, Subject.user_id == current_user.id
+        ).first()
+        if subject is None:
+            raise HTTPException(status_code=404, detail="Subject not found")
+        if not subject.syllabus_json:
+            raise HTTPException(status_code=400, detail="No syllabus parsed for this subject yet")
+
+        units = db.query(Unit).filter(Unit.subject_id == subject.id).all()
+        if not units:
+            raise HTTPException(status_code=400, detail="No units exist for this subject yet")
+
+        note_text = extract_text(file_data, file.content_type)
+        unit_names = [u.name for u in units]
+
+        try:
+            index = classify_note_to_unit(note_text, subject.syllabus_json, unit_names)
+            unit = units[index]
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"AI classification failed: {str(e)}")
+
+    else:
+        unit = db.query(Unit).join(Subject).filter(
+            Unit.id == unit_id,
+            Subject.user_id == current_user.id
+        ).first()
+        if unit is None:
+            raise HTTPException(status_code=404, detail="Unit not found")
+
+    file_path = (
+        f"users/{current_user.id}/"
+        f"subjects/{unit.subject_id}/"
+        f"units/{unit.id}/"
+        f"{file.filename}"
+    )
+
+    try:
+        supabase.storage.from_(SUPABASE_BUCKET).upload(
+            file_path, file_data, {"content-type": file.content_type}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
+
+    new_note = Note(
+        unit_id=unit.id,
+        file_name=file.filename,
+        file_path=file_path,
+        file_type=file.content_type
+    )
+    db.add(new_note)
+    db.commit()
+    db.refresh(new_note)
+
+    return new_note
+
+@app.get(
+    "/units/{unit_id}/notes",
+    response_model=list[NoteResponse]
+)
+def get_notes(
+    unit_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # 1. Verify that the unit belongs to the logged-in user
+    unit = db.query(Unit).join(Subject).filter(
+        Unit.id == unit_id,
+        Subject.user_id == current_user.id
+    ).first()
+
+    if unit is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unit not found"
+        )
+
+    # 2. Get all notes belonging to this unit
+    notes = db.query(Note).filter(
+        Note.unit_id == unit_id
+    ).all()
+
+    return notes
+
+@app.delete(
+    "/notes/{note_id}",
+    status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_note(
+    note_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    note = db.query(Note).join(Unit).join(Subject).filter(
+        Note.id == note_id,
+        Subject.user_id == current_user.id
+    ).first()
+
+    if note is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Note not found"
+        )
+
+    try:
+        supabase.storage.from_(SUPABASE_BUCKET).remove(
+            [note.file_path]
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"File deletion failed: {str(e)}"
+        )
+
+    db.delete(note)
+    db.commit()
+
+@app.get("/notes/{note_id}/preview")
+def preview_note(
+    note_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Verify that the note belongs to the current user
+    note = db.query(Note).join(Unit).join(Subject).filter(
+        Note.id == note_id,
+        Subject.user_id == current_user.id
+    ).first()
+
+    if note is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Note not found"
+        )
+
+    try:
+        # Create a temporary signed URL
+        response = supabase.storage.from_(SUPABASE_BUCKET).create_signed_url(
+            note.file_path,
+            3600
+        )
+
+        return {
+            "url": response["signedURL"],
+            "file_name": note.file_name,
+            "file_type": note.file_type
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Could not generate preview URL: {str(e)}"
+        )
+
+
+@app.post("/subjects/{subject_id}/syllabus/stream")
+def upload_syllabus_stream(
+    subject_id: UUID,
+    text: str = Form(None),
+    file: UploadFile = File(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    subject = db.query(Subject).filter(
+        Subject.id == subject_id, Subject.user_id == current_user.id
+    ).first()
+    if subject is None:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    if file is not None:
+        if file.content_type != "application/pdf":
+            raise HTTPException(status_code=400, detail="Only PDF files are supported")
+        raw_text = extract_text(file.file.read(), file.content_type)
+    elif text is not None:
+        raw_text = text
+    else:
+        raise HTTPException(status_code=400, detail="Provide either text or file")
+
+    def event_stream():
+        all_modules = []
+        unparsed_lines = []
+        confidence = "medium"
+        buffer = ""
+        try:
+            for chunk in stream_parse_syllabus(raw_text):
+                buffer += chunk
+                while "\n" in buffer:
+                    line, buffer = buffer.split("\n", 1)
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+
+                    if obj.get("type") == "module":
+                        module = obj["data"]
+                        all_modules.append(module)
+
+                        unit = Unit(name=module["title"], subject_id=subject.id)
+                        db.add(unit)
+                        db.commit()
+                        db.refresh(unit)
+
+                        yield f"data: {json.dumps({'type': 'module', 'unit_id': str(unit.id), 'module': module})}\n\n"
+
+                    elif obj.get("type") == "meta":
+                        confidence = obj["data"].get("parse_confidence", confidence)
+                        unparsed_lines = obj["data"].get("unparsed_lines", [])
+
+        except Exception as e:
+            subject.syllabus_status = "failed"
+            db.commit()
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            return
+
+        subject.syllabus_json = {
+            "modules": all_modules,
+            "parse_confidence": confidence,
+            "unparsed_lines": unparsed_lines,
+        }
+        subject.syllabus_status = "parsed"
+        db.commit()
+
+        yield f"data: {json.dumps({'type': 'done', 'parse_confidence': confidence, 'unparsed_lines': unparsed_lines})}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@app.get("/subjects/{subject_id}/syllabus", response_model=SyllabusResponse)
+def get_syllabus(
+    subject_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    subject = db.query(Subject).filter(
+        Subject.id == subject_id,
+        Subject.user_id == current_user.id
+    ).first()
+    if subject is None:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    return {
+        "subject_id": subject.id,
+        "syllabus_status": subject.syllabus_status,
+        "parsed_json": subject.syllabus_json
+    }
+
+
+
+
 
 @app.get("/about")
 def about():
