@@ -38,6 +38,7 @@ function AiMarkdownTab({ endpoint, field, active, loadingText }) {
   const [content, setContent] = useState("");
   const [skipped, setSkipped] = useState([]);
   const [error, setError] = useState("");
+  const [regenerating, setRegenerating] = useState(false);
   const startedRef = useRef(false); // stops the double-fetch in StrictMode
 
   const load = async () => {
@@ -61,6 +62,20 @@ function AiMarkdownTab({ endpoint, field, active, loadingText }) {
         setError("Something went wrong. Please try again.");
       }
       setStatus("error");
+    }
+  };
+
+  const regenerate = async () => {
+    setRegenerating(true);
+    try {
+      const res = await api.get(`${endpoint}?regenerate=true`);
+      setContent(res.data[field]);
+      setSkipped(res.data.files_skipped || []);
+    } catch (err) {
+      console.error("Regenerate failed:", err);
+      // Keep showing the existing content; just don't update it.
+    } finally {
+      setRegenerating(false);
     }
   };
 
@@ -96,6 +111,12 @@ function AiMarkdownTab({ endpoint, field, active, loadingText }) {
 
   return (
     <div>
+      <div className="mb-2 flex justify-end">
+        <Button type="button" variant="ghost" onClick={regenerate} disabled={regenerating}>
+          <RefreshCw className={`h-4 w-4 ${regenerating ? "animate-spin" : ""}`} />
+          {regenerating ? "Regenerating..." : "Regenerate"}
+        </Button>
+      </div>
       <div className="rounded-xl border border-border bg-surface px-6 py-5">
         <ReactMarkdown
             remarkPlugins={[remarkMath, remarkGfm]}
