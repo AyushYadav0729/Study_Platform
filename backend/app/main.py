@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.supabase_client import supabase
-from app.models import User, Subject, Unit, Note
+from app.models import User, Subject, Unit, Note, UnitContent
 from app.config import SUPABASE_BUCKET
 from app.database import engine, Base, get_db
 from app.security import hash_password, verify_password
@@ -34,6 +34,8 @@ from app.gemini_client import (
 )
 from uuid import UUID
 import json
+import hashlib
+from datetime import datetime
 
 app = FastAPI()
 app.add_middleware(
@@ -47,6 +49,8 @@ app.add_middleware(
 )
 
 Base.metadata.create_all(bind=engine)
+
+
 
 @app.get("/")
 def root():
@@ -455,13 +459,63 @@ def collect_unit_text(unit: Unit, db: Session):
 
     return "\n\n".join(parts), files_used, files_skipped
 
+def get_or_generate(unit: Unit, content_type: str, generator, db: Session, regenerate: bool = False):
+    """
+    Returns (content, files_used, files_skipped, cached).
+    Uses the stored result if it exists and the unit's files haven't changed;
+    otherwise generates with Gemini, stores it, and returns it.
+    """
+    # Fingerprint = the current set of note IDs in this unit.
+    # Uploading or deleting a file changes it, which invalidates the stored result.
+    note_ids = sorted(str(r[0]) for r in db.query(Note.id).filter(Note.unit_id == unit.id).all())
+    source_hash = hashlib.sha256("|".join(note_ids).encode()).hexdigest()
 
-@app.get("/units/{unit_id}/summary")
-def get_unit_summary(
-    unit_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
+    row = db.query(UnitContent).filter(
+        UnitContent.unit_id == unit.id,
+        UnitContent.content_type == content_type
+    ).first()
+
+    if row and not regenerate and row.source_hash == source_hash:
+        meta = row.meta or {}
+        return row.content, meta.get("files_used", []), meta.get("files_skipped", []), True
+
+    combined_text, files_used, files_skipped = collect_unit_text(unit, db)
+
+    try:
+        content = generator(combined_text)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI {content_type} generation failed: {str(e)}"
+        )
+
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI returned empty {content_type}"
+        )
+
+    meta = {"files_used": files_used, "files_skipped": files_skipped}
+
+    if row is None:
+        row = UnitContent(
+            unit_id=unit.id,
+            content_type=content_type,
+            content=content,
+            meta=meta,
+            source_hash=source_hash,
+        )
+        db.add(row)
+    else:
+        row.content = content
+        row.meta = meta
+        row.source_hash = source_hash
+        row.updated_at = datetime.utcnow()
+
+    db.commit()
+    return content, files_used, files_skipped, False
+
+def get_owned_unit(unit_id: UUID, current_user: User, db: Session) -> Unit:
     unit = db.query(Unit).join(Subject).filter(
         Unit.id == unit_id,
         Subject.user_id == current_user.id
@@ -472,112 +526,69 @@ def get_unit_summary(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Unit not found"
         )
+    return unit
 
-    combined_text, files_used, files_skipped = collect_unit_text(unit, db)
 
-    try:
-        summary = generate_unit_summary(combined_text)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"AI summary generation failed: {str(e)}"
-        )
-
-    if not summary:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="AI returned an empty summary"
-        )
-
+@app.get("/units/{unit_id}/summary")
+def get_unit_summary(
+    unit_id: UUID,
+    regenerate: bool = False,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    unit = get_owned_unit(unit_id, current_user, db)
+    content, used, skipped, cached = get_or_generate(
+        unit, "summary", generate_unit_summary, db, regenerate
+    )
     return {
         "unit_id": unit.id,
         "unit_name": unit.name,
-        "summary": summary,
-        "files_used": files_used,
-        "files_skipped": files_skipped
+        "summary": content,
+        "files_used": used,
+        "files_skipped": skipped,
+        "cached": cached
     }
 
 
 @app.get("/units/{unit_id}/ai-notes")
 def get_unit_ai_notes(
     unit_id: UUID,
+    regenerate: bool = False,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    unit = db.query(Unit).join(Subject).filter(
-        Unit.id == unit_id,
-        Subject.user_id == current_user.id
-    ).first()
-
-    if unit is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Unit not found"
-        )
-
-    combined_text, files_used, files_skipped = collect_unit_text(unit, db)
-
-    try:
-        notes_md = generate_unit_notes(combined_text)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"AI notes generation failed: {str(e)}"
-        )
-
-    if not notes_md:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="AI returned empty notes"
-        )
-
+    unit = get_owned_unit(unit_id, current_user, db)
+    content, used, skipped, cached = get_or_generate(
+        unit, "notes", generate_unit_notes, db, regenerate
+    )
     return {
         "unit_id": unit.id,
         "unit_name": unit.name,
-        "notes": notes_md,
-        "files_used": files_used,
-        "files_skipped": files_skipped
+        "notes": content,
+        "files_used": used,
+        "files_skipped": skipped,
+        "cached": cached
     }
+
 
 @app.get("/units/{unit_id}/flashcards")
 def get_unit_flashcards(
     unit_id: UUID,
+    regenerate: bool = False,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    unit = db.query(Unit).join(Subject).filter(
-        Unit.id == unit_id,
-        Subject.user_id == current_user.id
-    ).first()
-
-    if unit is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Unit not found"
-        )
-
-    combined_text, files_used, files_skipped = collect_unit_text(unit, db)
-
-    try:
-        flashcards = generate_unit_flashcards(combined_text)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"AI flashcard generation failed: {str(e)}"
-        )
-
-    if not flashcards:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="AI returned no flashcards"
-        )
-
+    unit = get_owned_unit(unit_id, current_user, db)
+    content, used, skipped, cached = get_or_generate(
+        unit, "flashcards", generate_unit_flashcards, db, regenerate
+    )
     return {
         "unit_id": unit.id,
         "unit_name": unit.name,
-        "flashcards": flashcards,
-        "files_used": files_used,
-        "files_skipped": files_skipped
+        "flashcards": content,
+        "files_used": used,
+        "files_skipped": skipped,
+        "cached": cached
     }
 
 @app.post("/subjects/{subject_id}/syllabus/stream")

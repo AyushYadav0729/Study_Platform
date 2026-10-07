@@ -3,9 +3,12 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Home from "./pages/Home";
 import Subject from "./pages/Subject";
+import Unit from "./pages/Unit";
+
 import ProtectedRoute from "./components/ProtectedRoute";
 import { useSubjects } from "./hooks/useSubjects";
 import { authService } from "./services/authService";
+
 
 function App() {
   const {
@@ -56,6 +59,14 @@ function App() {
             element={
               <ProtectedRoute>
                  <Subject subjects={subjects} onRemoveSubject={removeSubject} onUpdateSubject={updateSubject} />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/subject/:id/unit/:unitId"
+            element={
+              <ProtectedRoute>
+                <Unit subjects={subjects} />
               </ProtectedRoute>
             }
           />

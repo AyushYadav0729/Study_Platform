@@ -1,5 +1,8 @@
 react
 react-dom
 react-router-dom
+remark-math rehype-katex katex
+remark-gfm
+react-markdown
 axios
 vite

@@ -118,6 +118,7 @@ Generate a concise, exam-oriented summary of the material.
 
 Requirements:
 - Cover the important concepts from the provided material.
+- Write all mathematical formulas in LaTeX, using $...$ for inline formulas and $$...$$ for standalone formulas.
 - Organize the answer using clear headings and subheadings.
 - Use bullet points wherever appropriate.
 - Keep explanations short and easy to revise.
@@ -151,6 +152,7 @@ Generate clear study notes that help the student UNDERSTAND the material.
 
 Requirements:
 - These notes are more explanatory than a summary: explain each concept in 2-4 short sentences, not just keywords.
+- Write all mathematical formulas in LaTeX, using $...$ for inline formulas and $$...$$ for standalone formulas.
 - Organize the notes with clear headings and subheadings that follow the logical flow of the material.
 - Explain what each concept is, how it works, and why it matters, when the material supports it.
 - Include examples, formulas, and steps that appear in the material.
