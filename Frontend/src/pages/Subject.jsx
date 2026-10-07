@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import api from "../services/authService";
 import subjectsService from "../services/subjectsService";
 import { takePendingSyllabus } from "../utils/pendingSyllabusStore";
-import { ArrowLeft, Upload, FileText, Trash2, Plus, ChevronDown, X, Layers, Sparkles, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Upload, FileText, Trash2, Plus, ChevronDown, X, Layers, Sparkles } from "lucide-react";;
 import Button from "../components/ui/Button";
 import AddUnitModal from "../components/AddUnitModal";
 import UnitSelect, { AI_RECOMMEND_VALUE } from "../components/ui/UnitSelect";
@@ -526,16 +526,29 @@ const handleDeleteNote = async (noteId) => {
                       : "border-border bg-surface"
                   }`}
                 >
-                  <button
-                    type="button"
-                    aria-label={`Remove ${unit.name}`}
-                    onClick={() => setUnitToDelete(unit)}
-                    className="absolute right-3 top-3 rounded-md p-1.5 text-ink-faint hover:bg-danger/10 hover:text-danger"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+                  <div className="absolute right-3 top-3 flex items-center gap-2">
+                    <button
+                      type="button"
+                      aria-label={`Open ${unit.name}`}
+                      title="Open unit"
+                      onClick={() => navigate(`/subject/${id}/unit/${unit.id}`)}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-accent/30 bg-accent/10 text-accent transition-colors hover:border-accent/60 hover:bg-accent/20"
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                    </button>
 
-                  <div className="flex items-center gap-2.5 pr-8">
+                    <button
+                      type="button"
+                      aria-label={`Delete ${unit.name}`}
+                      title="Delete unit"
+                      onClick={() => setUnitToDelete(unit)}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-danger/30 bg-danger/10 text-danger transition-colors hover:border-danger/60 hover:bg-danger/20"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 pr-24">
                     <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-soft text-teal">
                       <Layers className="h-4 w-4" />
                     </span>

@@ -1,9 +1,10 @@
 # this defines how we will write the data in signup database 
-from sqlalchemy import Column, String, ForeignKey, DateTime
+from sqlalchemy import Column, String, ForeignKey, DateTime, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 import uuid
 from datetime import datetime
+
 
 from app.database import Base
 
@@ -82,6 +83,12 @@ class Unit(Base):
         cascade="all, delete-orphan"
     )
 
+    contents = relationship(
+        "UnitContent",
+        back_populates="unit",
+        cascade="all, delete-orphan"
+    )
+
 
 class Note(Base):
     __tablename__ = "notes"
@@ -107,3 +114,34 @@ class Note(Base):
         "Unit",
         back_populates="notes"
     )
+
+class UnitContent(Base):
+    __tablename__ = "unit_contents"
+    __table_args__ = (
+        UniqueConstraint("unit_id", "content_type", name="uq_unit_content_type"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    unit_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("units.id", ondelete="CASCADE"),
+        nullable=False
+    )
+
+    # "summary" | "notes" | "flashcards"
+    content_type = Column(String, nullable=False)
+
+    # Markdown string for summary/notes, list of cards for flashcards
+    content = Column(JSONB, nullable=False)
+
+    # {"files_used": [...], "files_skipped": [...]}
+    meta = Column(JSONB, nullable=True)
+
+    # Fingerprint of the unit's files when this was generated
+    source_hash = Column(String, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    unit = relationship("Unit", back_populates="contents")

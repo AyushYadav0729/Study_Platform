@@ -2,8 +2,10 @@ import json
 from google import genai
 from google.genai import types
 from app.config import GEMINI_API_KEY
+from pydantic import BaseModel
 
 client = genai.Client(api_key=GEMINI_API_KEY)
+m = "gemini-3.5-flash"
 
 SYLLABUS_PARSING_PROMPT = """You convert a raw college syllabus into structured data.
 
@@ -59,7 +61,7 @@ filtering, password strength estimation, disease prediction.
 
 def stream_parse_syllabus(raw_text: str):
     response_stream = client.models.generate_content_stream(
-        model="gemini-3.6-flash",
+        model=m,
         contents=raw_text,
         config=types.GenerateContentConfig(
             system_instruction=SYLLABUS_PARSING_PROMPT,
@@ -96,7 +98,7 @@ NOTES DOCUMENT TEXT (may be truncated):
 {note_text[:8000]}
 """
     response = client.models.generate_content(
-        model="gemini-3.6-flash",
+        model=m,
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction=NOTE_CLASSIFICATION_PROMPT,
@@ -106,3 +108,122 @@ NOTES DOCUMENT TEXT (may be truncated):
     )
     result = json.loads(response.text)
     return result["unit_index"]
+
+SUMMARY_PROMPT = """
+You are an AI study assistant for college students.
+
+You will receive study material belonging to ONE unit of a course.
+
+Generate a concise, exam-oriented summary of the material.
+
+Requirements:
+- Cover the important concepts from the provided material.
+- Write all mathematical formulas in LaTeX, using $...$ for inline formulas and $$...$$ for standalone formulas.
+- Organize the answer using clear headings and subheadings.
+- Use bullet points wherever appropriate.
+- Keep explanations short and easy to revise.
+- Include important definitions, concepts, formulas, steps, and distinctions when present.
+- Do not invent information that is not present in the material.
+- Do not repeat the same point unnecessarily.
+- Focus on information useful for understanding and exam revision.
+- Do not write a conclusion or introduction unless it is useful.
+- Return clean Markdown only.
+"""
+
+
+def generate_unit_summary(unit_text: str) -> str:
+    response = client.models.generate_content(
+        model=m,
+        contents=unit_text,
+        config=types.GenerateContentConfig(
+            system_instruction=SUMMARY_PROMPT,
+            temperature=0.2,
+        ),
+    )
+
+    return response.text
+
+NOTES_PROMPT = """
+You are an AI study assistant for college students.
+
+You will receive study material belonging to ONE unit of a course.
+
+Generate clear study notes that help the student UNDERSTAND the material.
+
+Requirements:
+- These notes are more explanatory than a summary: explain each concept in 2-4 short sentences, not just keywords.
+- Write all mathematical formulas in LaTeX, using $...$ for inline formulas and $$...$$ for standalone formulas.
+- Organize the notes with clear headings and subheadings that follow the logical flow of the material.
+- Explain what each concept is, how it works, and why it matters, when the material supports it.
+- Include examples, formulas, and steps that appear in the material.
+- Use bullet points for lists and short paragraphs for explanations.
+- Keep the notes concise. Do not copy the material word for word.
+- Do not invent information that is not present in the material.
+- Do not repeat the same point unnecessarily.
+- Return clean Markdown only.
+"""
+
+
+def generate_unit_notes(unit_text: str) -> str:
+    response = client.models.generate_content(
+        model=m,
+        contents=unit_text,
+        config=types.GenerateContentConfig(
+            system_instruction=NOTES_PROMPT,
+            temperature=0.3,
+        ),
+    )
+
+    return response.text
+
+class FlashcardItem(BaseModel):
+    topic: str
+    question: str
+    answer: str
+
+
+FLASHCARDS_PROMPT = """
+You are an AI study assistant for college students.
+
+You will receive study material belonging to ONE unit of a course.
+
+Generate flashcards for active recall covering ONLY the important concepts
+of the material (key definitions, differences between concepts, formulas,
+important steps/processes, and core principles).
+
+Requirements:
+- Generate between 15 and 25 flashcards, depending on how much important content the material has.
+- "topic": a short label (1-4 words) taken from the heading or subject the card belongs to.
+- "question": ONE specific, self-contained question. Avoid vague questions like "Explain X".
+- "answer": a short, direct answer (1-3 sentences, or a few short lines for steps/lists). Never a full paragraph.
+- Do not make cards for minor details, examples, or trivia.
+- Do not create duplicate or near-duplicate cards.
+- Do not invent information that is not present in the material.
+- Order the cards in the same order the topics appear in the material.
+"""
+
+
+def generate_unit_flashcards(unit_text: str) -> list[dict]:
+    response = client.models.generate_content(
+        model=m,
+        contents=unit_text,
+        config=types.GenerateContentConfig(
+            system_instruction=FLASHCARDS_PROMPT,
+            temperature=0.3,
+            response_mime_type="application/json",
+            response_schema=list[FlashcardItem],
+        ),
+    )
+
+    cards = json.loads(response.text)
+
+    # Keep only well-formed cards
+    return [
+        {
+            "topic": c["topic"].strip(),
+            "question": c["question"].strip(),
+            "answer": c["answer"].strip(),
+        }
+        for c in cards
+        if c.get("question", "").strip() and c.get("answer", "").strip()
+    ]

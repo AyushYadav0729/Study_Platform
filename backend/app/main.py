@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.supabase_client import supabase
-from app.models import User, Subject, Unit, Note
+from app.models import User, Subject, Unit, Note, UnitContent
 from app.config import SUPABASE_BUCKET
 from app.database import engine, Base, get_db
 from app.security import hash_password, verify_password
@@ -25,9 +25,17 @@ from app.schemas import (
 )
 from app.auth import get_current_user
 from app.text_extractor import extract_text
-from app.gemini_client import stream_parse_syllabus, classify_note_to_unit
+from app.gemini_client import (
+    stream_parse_syllabus,
+    classify_note_to_unit,
+    generate_unit_summary,
+    generate_unit_notes,
+    generate_unit_flashcards,
+)
 from uuid import UUID
 import json
+import hashlib
+from datetime import datetime
 
 app = FastAPI()
 app.add_middleware(
@@ -41,6 +49,8 @@ app.add_middleware(
 )
 
 Base.metadata.create_all(bind=engine)
+
+
 
 @app.get("/")
 def root():
@@ -396,6 +406,190 @@ def preview_note(
             detail=f"Could not generate preview URL: {str(e)}"
         )
 
+SUPPORTED_TEXT_TYPES = {"application/pdf", "text/plain"}
+
+
+def collect_unit_text(unit: Unit, db: Session):
+    """
+    Downloads all files of a unit from Supabase, extracts their text,
+    and returns (combined_text, files_used, files_skipped).
+    Raises HTTPException if there is nothing usable.
+    """
+    notes = db.query(Note).filter(Note.unit_id == unit.id).all()
+
+    if not notes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No materials uploaded for this unit yet"
+        )
+
+    parts = []
+    files_used = []
+    files_skipped = []
+
+    for note in notes:
+        # extract_text only handles PDF/plain text properly for now
+        if note.file_type not in SUPPORTED_TEXT_TYPES:
+            files_skipped.append(note.file_name)
+            continue
+
+        try:
+            file_bytes = supabase.storage.from_(SUPABASE_BUCKET).download(note.file_path)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Could not download {note.file_name}: {str(e)}"
+            )
+
+        text = extract_text(file_bytes, note.file_type).strip()
+
+        # e.g. scanned PDFs have no extractable text
+        if not text:
+            files_skipped.append(note.file_name)
+            continue
+
+        parts.append(f"=== {note.file_name} ===\n{text}")
+        files_used.append(note.file_name)
+
+    if not parts:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No readable text found in this unit's files"
+        )
+
+    return "\n\n".join(parts), files_used, files_skipped
+
+def get_or_generate(unit: Unit, content_type: str, generator, db: Session, regenerate: bool = False):
+    """
+    Returns (content, files_used, files_skipped, cached).
+    Uses the stored result if it exists and the unit's files haven't changed;
+    otherwise generates with Gemini, stores it, and returns it.
+    """
+    # Fingerprint = the current set of note IDs in this unit.
+    # Uploading or deleting a file changes it, which invalidates the stored result.
+    note_ids = sorted(str(r[0]) for r in db.query(Note.id).filter(Note.unit_id == unit.id).all())
+    source_hash = hashlib.sha256("|".join(note_ids).encode()).hexdigest()
+
+    row = db.query(UnitContent).filter(
+        UnitContent.unit_id == unit.id,
+        UnitContent.content_type == content_type
+    ).first()
+
+    if row and not regenerate and row.source_hash == source_hash:
+        meta = row.meta or {}
+        return row.content, meta.get("files_used", []), meta.get("files_skipped", []), True
+
+    combined_text, files_used, files_skipped = collect_unit_text(unit, db)
+
+    try:
+        content = generator(combined_text)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI {content_type} generation failed: {str(e)}"
+        )
+
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI returned empty {content_type}"
+        )
+
+    meta = {"files_used": files_used, "files_skipped": files_skipped}
+
+    if row is None:
+        row = UnitContent(
+            unit_id=unit.id,
+            content_type=content_type,
+            content=content,
+            meta=meta,
+            source_hash=source_hash,
+        )
+        db.add(row)
+    else:
+        row.content = content
+        row.meta = meta
+        row.source_hash = source_hash
+        row.updated_at = datetime.utcnow()
+
+    db.commit()
+    return content, files_used, files_skipped, False
+
+def get_owned_unit(unit_id: UUID, current_user: User, db: Session) -> Unit:
+    unit = db.query(Unit).join(Subject).filter(
+        Unit.id == unit_id,
+        Subject.user_id == current_user.id
+    ).first()
+
+    if unit is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unit not found"
+        )
+    return unit
+
+
+@app.get("/units/{unit_id}/summary")
+def get_unit_summary(
+    unit_id: UUID,
+    regenerate: bool = False,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    unit = get_owned_unit(unit_id, current_user, db)
+    content, used, skipped, cached = get_or_generate(
+        unit, "summary", generate_unit_summary, db, regenerate
+    )
+    return {
+        "unit_id": unit.id,
+        "unit_name": unit.name,
+        "summary": content,
+        "files_used": used,
+        "files_skipped": skipped,
+        "cached": cached
+    }
+
+
+@app.get("/units/{unit_id}/ai-notes")
+def get_unit_ai_notes(
+    unit_id: UUID,
+    regenerate: bool = False,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    unit = get_owned_unit(unit_id, current_user, db)
+    content, used, skipped, cached = get_or_generate(
+        unit, "notes", generate_unit_notes, db, regenerate
+    )
+    return {
+        "unit_id": unit.id,
+        "unit_name": unit.name,
+        "notes": content,
+        "files_used": used,
+        "files_skipped": skipped,
+        "cached": cached
+    }
+
+
+@app.get("/units/{unit_id}/flashcards")
+def get_unit_flashcards(
+    unit_id: UUID,
+    regenerate: bool = False,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    unit = get_owned_unit(unit_id, current_user, db)
+    content, used, skipped, cached = get_or_generate(
+        unit, "flashcards", generate_unit_flashcards, db, regenerate
+    )
+    return {
+        "unit_id": unit.id,
+        "unit_name": unit.name,
+        "flashcards": content,
+        "files_used": used,
+        "files_skipped": skipped,
+        "cached": cached
+    }
 
 @app.post("/subjects/{subject_id}/syllabus/stream")
 def upload_syllabus_stream(
