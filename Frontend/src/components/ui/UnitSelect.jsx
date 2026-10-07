@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { ChevronDown, Check, Plus, Sparkles } from "lucide-react";
 
+export const AI_RECOMMEND_VALUE = "ai_recommend";
+
 function UnitSelect({ units, value, onChange, onAddUnit, placeholder = "No units yet", disabled = false }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);

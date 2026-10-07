@@ -4,6 +4,7 @@ import { ArrowLeft, FileText, Upload, X } from "lucide-react";
 import api from "../services/authService";
 import Button from "../components/ui/Button";
 import AiMarkdownTab from "../components/AiMarkdownTab";
+import FlashcardsTab from "../components/FlashcardsTab";
 
 const TABS = [
   { key: "materials", label: "Materials" },
@@ -283,11 +284,11 @@ function Unit({ subjects }) {
             loadingText="Reading your materials and writing study notes…"
             />
 
-            {activeTab === "flashcards" && (
-            <p className="text-[13px] text-ink-faint">
-                Flashcards is coming in the next step.
-            </p>
-            )}
+            <FlashcardsTab
+            key={`flashcards-${unitId}`}
+            unitId={unitId}
+            active={activeTab === "flashcards"}
+            />
             {previewFile && (
             <div
                 className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
