@@ -16,6 +16,7 @@ function AddSubjectModal({ open, onClose, onAdd }) {
   const fileInputRef = useRef(null);
 
   const handleClose = () => {
+    if (submitting) return;
     setName("");
     setSyllabus("");
     setSyllabusFile(null);
@@ -27,7 +28,7 @@ function AddSubjectModal({ open, onClose, onAdd }) {
 
   useEffect(() => {
     const handleKey = (e) => {
-      if (e.key === "Escape") {
+      if (e.key === "Escape" && !submitting) {
         setName("");
         setSyllabus("");
         setSyllabusFile(null);
@@ -38,7 +39,7 @@ function AddSubjectModal({ open, onClose, onAdd }) {
     };
     if (open) document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
-  }, [open, onClose]);
+  }, [open, onClose, submitting]);
 
   if (!open) return null;
 
@@ -105,8 +106,9 @@ function AddSubjectModal({ open, onClose, onAdd }) {
           <button
             type="button"
             onClick={handleClose}
+            disabled={submitting}
             aria-label="Close"
-            className="rounded-md p-1 text-ink-faint hover:bg-surface-hover hover:text-ink"
+            className="rounded-md p-1 text-ink-faint hover:bg-surface-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
           >
             <X className="h-4 w-4" />
           </button>
@@ -124,6 +126,7 @@ function AddSubjectModal({ open, onClose, onAdd }) {
               if (error) setError("");
             }}
             error={error}
+            disabled={submitting}
           />
 
           <div className="mb-4">
@@ -137,7 +140,8 @@ function AddSubjectModal({ open, onClose, onAdd }) {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-1 text-[13px] font-medium text-accent hover:opacity-80"
+                disabled={submitting}
+                className="flex items-center gap-1 text-[13px] font-medium text-accent hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Upload className="h-3.5 w-3.5" />
                 Upload PDF
@@ -148,6 +152,7 @@ function AddSubjectModal({ open, onClose, onAdd }) {
                 accept="application/pdf"
                 className="hidden"
                 onChange={handleFileChange}
+                disabled={submitting}
               />
             </div>
 
@@ -157,8 +162,9 @@ function AddSubjectModal({ open, onClose, onAdd }) {
                 <button
                   type="button"
                   onClick={handleRemoveFile}
+                  disabled={submitting}
                   aria-label="Remove file"
-                  className="ml-2 shrink-0 rounded-md p-1 text-ink-faint hover:bg-surface-hover hover:text-ink"
+                  className="ml-2 shrink-0 rounded-md p-1 text-ink-faint hover:bg-surface-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -171,7 +177,8 @@ function AddSubjectModal({ open, onClose, onAdd }) {
                 placeholder="Paste your syllabus text directly from course page to help generate better summaries and quizzes"
                 value={syllabus}
                 onChange={(e) => setSyllabus(e.target.value)}
-                className="w-full resize-none rounded-lg border border-border bg-bg-alt/40 px-3.5 py-2.5 text-[15px] text-ink placeholder:text-ink-faint outline-none transition-colors focus:border-accent"
+                disabled={submitting}
+                className="w-full resize-none rounded-lg border border-border bg-bg-alt/40 px-3.5 py-2.5 text-[15px] text-ink placeholder:text-ink-faint outline-none transition-colors focus:border-accent disabled:cursor-not-allowed disabled:opacity-50"
               />
             )}
             {fileError && (
@@ -180,7 +187,7 @@ function AddSubjectModal({ open, onClose, onAdd }) {
           </div>
 
           <div className="mt-1 flex justify-end gap-2.5">
-            <Button type="button" variant="ghost" onClick={handleClose}>
+            <Button type="button" variant="ghost" onClick={handleClose} disabled={submitting}>
               Cancel
             </Button>
             <Button type="submit" loading={submitting}>
