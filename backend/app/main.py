@@ -25,7 +25,13 @@ from app.schemas import (
 )
 from app.auth import get_current_user
 from app.text_extractor import extract_text
-from app.gemini_client import stream_parse_syllabus, classify_note_to_unit
+from app.gemini_client import (
+    stream_parse_syllabus,
+    classify_note_to_unit,
+    generate_unit_summary,
+    generate_unit_notes,
+    generate_unit_flashcards,
+)
 from uuid import UUID
 import json
 
@@ -396,6 +402,183 @@ def preview_note(
             detail=f"Could not generate preview URL: {str(e)}"
         )
 
+SUPPORTED_TEXT_TYPES = {"application/pdf", "text/plain"}
+
+
+def collect_unit_text(unit: Unit, db: Session):
+    """
+    Downloads all files of a unit from Supabase, extracts their text,
+    and returns (combined_text, files_used, files_skipped).
+    Raises HTTPException if there is nothing usable.
+    """
+    notes = db.query(Note).filter(Note.unit_id == unit.id).all()
+
+    if not notes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No materials uploaded for this unit yet"
+        )
+
+    parts = []
+    files_used = []
+    files_skipped = []
+
+    for note in notes:
+        # extract_text only handles PDF/plain text properly for now
+        if note.file_type not in SUPPORTED_TEXT_TYPES:
+            files_skipped.append(note.file_name)
+            continue
+
+        try:
+            file_bytes = supabase.storage.from_(SUPABASE_BUCKET).download(note.file_path)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Could not download {note.file_name}: {str(e)}"
+            )
+
+        text = extract_text(file_bytes, note.file_type).strip()
+
+        # e.g. scanned PDFs have no extractable text
+        if not text:
+            files_skipped.append(note.file_name)
+            continue
+
+        parts.append(f"=== {note.file_name} ===\n{text}")
+        files_used.append(note.file_name)
+
+    if not parts:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No readable text found in this unit's files"
+        )
+
+    return "\n\n".join(parts), files_used, files_skipped
+
+
+@app.get("/units/{unit_id}/summary")
+def get_unit_summary(
+    unit_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    unit = db.query(Unit).join(Subject).filter(
+        Unit.id == unit_id,
+        Subject.user_id == current_user.id
+    ).first()
+
+    if unit is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unit not found"
+        )
+
+    combined_text, files_used, files_skipped = collect_unit_text(unit, db)
+
+    try:
+        summary = generate_unit_summary(combined_text)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI summary generation failed: {str(e)}"
+        )
+
+    if not summary:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI returned an empty summary"
+        )
+
+    return {
+        "unit_id": unit.id,
+        "unit_name": unit.name,
+        "summary": summary,
+        "files_used": files_used,
+        "files_skipped": files_skipped
+    }
+
+
+@app.get("/units/{unit_id}/ai-notes")
+def get_unit_ai_notes(
+    unit_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    unit = db.query(Unit).join(Subject).filter(
+        Unit.id == unit_id,
+        Subject.user_id == current_user.id
+    ).first()
+
+    if unit is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unit not found"
+        )
+
+    combined_text, files_used, files_skipped = collect_unit_text(unit, db)
+
+    try:
+        notes_md = generate_unit_notes(combined_text)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI notes generation failed: {str(e)}"
+        )
+
+    if not notes_md:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI returned empty notes"
+        )
+
+    return {
+        "unit_id": unit.id,
+        "unit_name": unit.name,
+        "notes": notes_md,
+        "files_used": files_used,
+        "files_skipped": files_skipped
+    }
+
+@app.get("/units/{unit_id}/flashcards")
+def get_unit_flashcards(
+    unit_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    unit = db.query(Unit).join(Subject).filter(
+        Unit.id == unit_id,
+        Subject.user_id == current_user.id
+    ).first()
+
+    if unit is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unit not found"
+        )
+
+    combined_text, files_used, files_skipped = collect_unit_text(unit, db)
+
+    try:
+        flashcards = generate_unit_flashcards(combined_text)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI flashcard generation failed: {str(e)}"
+        )
+
+    if not flashcards:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI returned no flashcards"
+        )
+
+    return {
+        "unit_id": unit.id,
+        "unit_name": unit.name,
+        "flashcards": flashcards,
+        "files_used": files_used,
+        "files_skipped": files_skipped
+    }
 
 @app.post("/subjects/{subject_id}/syllabus/stream")
 def upload_syllabus_stream(
