@@ -118,8 +118,8 @@ Generate a concise, exam-oriented summary of the material.
 
 Requirements:
 - Cover the important concepts from the provided material.
-- Write all mathematical formulas in LaTeX, using $...$ for inline formulas and $$...$$ for standalone formulas.
-- Organize the answer using clear headings and subheadings.
+- Put every formula and every step of a worked calculation on its own line, wrapped in $$...$$ with a blank line before and after. Write fractions with \\dfrac. Use $...$ only for short inline symbols like $X_1$.
+- Put each key definition, rule, or exam-critical statement on its own line as a Markdown blockquote starting with "> " (one sentence, with the key term in bold). Use these sparingly, only for the most important points.- Organize the answer using clear headings and subheadings.
 - Use bullet points wherever appropriate.
 - Keep explanations short and easy to revise.
 - Include important definitions, concepts, formulas, steps, and distinctions when present.
@@ -152,7 +152,8 @@ Generate clear study notes that help the student UNDERSTAND the material.
 
 Requirements:
 - These notes are more explanatory than a summary: explain each concept in 2-4 short sentences, not just keywords.
-- Write all mathematical formulas in LaTeX, using $...$ for inline formulas and $$...$$ for standalone formulas.
+- Put every formula and every step of a worked calculation on its own line, wrapped in $$...$$ with a blank line before and after. Write fractions with \\dfrac. Use $...$ only for short inline symbols like $X_1$.
+- Put each key definition, rule, or exam-critical statement on its own line as a Markdown blockquote starting with "> " (one sentence, with the key term in bold). Use these sparingly, only for the most important points.
 - Organize the notes with clear headings and subheadings that follow the logical flow of the material.
 - Explain what each concept is, how it works, and why it matters, when the material supports it.
 - Include examples, formulas, and steps that appear in the material.

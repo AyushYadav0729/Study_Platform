@@ -18,15 +18,22 @@ const mdComponents = {
   thead: (p) => <thead className="bg-bg-alt" {...p} />,
   th: (p) => <th className="border-b border-border px-3 py-2 font-semibold text-ink" {...p} />,
   td: (p) => <td className="border-t border-border px-3 py-2 align-top text-ink-dim" {...p} />,
-  h1: (p) => <h2 className="mt-6 mb-2 text-[1.25rem] text-ink" style={{ fontFamily: "var(--font-display)" }} {...p} />,
-  h2: (p) => <h3 className="mt-6 mb-2 text-[1.1rem] text-ink" style={{ fontFamily: "var(--font-display)" }} {...p} />,
-  h3: (p) => <h4 className="mt-4 mb-1.5 text-[15px] font-semibold text-ink" {...p} />,
-  p: (p) => <p className="my-2 text-[14px] leading-relaxed text-ink-dim" {...p} />,
-  ul: (p) => <ul className="my-2 ml-5 list-disc space-y-1 text-[14px] text-ink-dim" {...p} />,
-  ol: (p) => <ol className="my-2 ml-5 list-decimal space-y-1 text-[14px] text-ink-dim" {...p} />,
-  li: (p) => <li className="leading-relaxed" {...p} />,
+  h1: (p) => <h2 className="mt-9 mb-3 text-[1.3rem] text-ink" style={{ fontFamily: "var(--font-display)" }} {...p} />,
+  h2: (p) => <h3 className="mt-8 mb-3 text-[1.15rem] text-ink" style={{ fontFamily: "var(--font-display)" }} {...p} />,
+  h3: (p) => <h4 className="mt-6 mb-2 text-[15.5px] font-semibold text-ink" {...p} />,
+  p: (p) => <p className="my-3 text-[15px] leading-[1.85] text-ink-dim" {...p} />,
+  ul: (p) => <ul className="my-3 ml-5 list-disc space-y-2 text-[15px] text-ink-dim" {...p} />,
+  ol: (p) => <ol className="my-3 ml-5 list-decimal space-y-2 text-[15px] text-ink-dim" {...p} />,
+  li: (p) => <li className="leading-[1.8] pl-1" {...p} />,
   strong: (p) => <strong className="font-semibold text-ink" {...p} />,
-  code: (p) => <code className="rounded bg-bg-alt px-1.5 py-0.5 text-[13px] text-ink" {...p} />,
+  code: (p) => <code className="rounded bg-bg-alt px-1.5 py-0.5 text-[13.5px] text-ink" {...p} />,
+  // keep your existing table / thead / th / td lines here unchanged
+  blockquote: (p) => (
+    <blockquote
+      className="my-5 rounded-lg border border-l-4 border-accent/40 border-l-accent bg-accent/10 px-5 py-3 [&>p]:my-1"
+      {...p}
+    />
+  ),
 };
 const normalizeMath = (text) =>
   text
@@ -117,7 +124,7 @@ function AiMarkdownTab({ endpoint, field, active, loadingText }) {
           {regenerating ? "Regenerating..." : "Regenerate"}
         </Button>
       </div>
-      <div className="rounded-xl border border-border bg-surface px-6 py-5">
+      <div className="ai-md rounded-xl border border-border bg-surface px-7 py-6">
         <ReactMarkdown
             remarkPlugins={[remarkMath, remarkGfm]}
             rehypePlugins={[rehypeKatex]}
