@@ -1,16 +1,18 @@
-function Logo({ size = "md", light = false }) {
-  const textSize = size === "lg" ? "text-2xl" : "text-lg";
+function Logo({ size = "md" }) {
+  const isLarge = size === "lg";
+  const textSize = isLarge ? "text-2xl" : "text-lg";
+  const markSize = isLarge ? "h-9 w-9 text-sm" : "h-7 w-7 text-[13px]";
 
   return (
     <div className="inline-flex items-center gap-2">
       <span
-        className="flex h-7 w-7 items-center justify-center rounded-[7px] bg-accent text-[13px] font-bold text-[#1a1305]"
+        className={`flex items-center justify-center rounded-[8px] bg-accent font-bold text-[#1a1305] ${markSize}`}
         style={{ fontFamily: "var(--font-display)" }}
       >
         S²
       </span>
       <span
-        className={`${textSize} ${light ? "text-ink" : "text-ink"} font-medium`}
+        className={`${textSize} font-medium text-ink`}
         style={{ fontFamily: "var(--font-display)" }}
       >
         Study-Stop

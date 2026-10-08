@@ -49,15 +49,19 @@ function AddUnitModal({ open, onClose, onAdd }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-[2px]"
       onClick={handleClose}
     >
       <div
-        className="w-full max-w-[400px] rounded-xl border border-border bg-surface p-6 shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-unit-title"
+        className="w-full max-w-[440px] rounded-2xl border border-border bg-surface p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-5 flex items-center justify-between">
+        <div className="mb-6 flex items-center justify-between">
           <h3
+            id="add-unit-title"
             className="text-[1.2rem] text-ink"
             style={{ fontFamily: "var(--font-display)" }}
           >
@@ -68,7 +72,7 @@ function AddUnitModal({ open, onClose, onAdd }) {
             onClick={handleClose}
             disabled={submitting}
             aria-label="Close"
-            className="rounded-md p-1 text-ink-faint hover:bg-surface-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-faint transition-colors hover:bg-surface-hover hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
           >
             <X className="h-4 w-4" />
           </button>
@@ -88,7 +92,7 @@ function AddUnitModal({ open, onClose, onAdd }) {
             error={error}
             disabled={submitting}
           />
-          <div className="mt-1 flex justify-end gap-2.5">
+          <div className="mt-2 flex justify-end gap-2.5">
             <Button type="button" variant="ghost" onClick={handleClose} disabled={submitting}>
               Cancel
             </Button>

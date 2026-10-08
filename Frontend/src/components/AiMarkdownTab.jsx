@@ -39,6 +39,7 @@ function AiMarkdownTab({ endpoint, field, active, loadingText }) {
   const [skipped, setSkipped] = useState([]);
   const [error, setError] = useState("");
   const [regenerating, setRegenerating] = useState(false);
+  const [regenerateError, setRegenerateError] = useState("");
   const startedRef = useRef(false); // stops the double-fetch in StrictMode
 
   const load = async () => {
@@ -67,12 +68,14 @@ function AiMarkdownTab({ endpoint, field, active, loadingText }) {
 
   const regenerate = async () => {
     setRegenerating(true);
+    setRegenerateError("");
     try {
       const res = await api.get(`${endpoint}?regenerate=true`);
       setContent(res.data[field]);
       setSkipped(res.data.files_skipped || []);
     } catch (err) {
       console.error("Regenerate failed:", err);
+      setRegenerateError("Couldn't regenerate this content. Your existing content is still available.");
       // Keep showing the existing content; just don't update it.
     } finally {
       setRegenerating(false);
@@ -88,7 +91,7 @@ function AiMarkdownTab({ endpoint, field, active, loadingText }) {
 
   if (status === "loading" || status === "idle") {
     return (
-      <div className="flex items-center gap-3 rounded-xl border border-accent/30 bg-accent/5 px-4 py-3 text-[13px] text-ink-dim">
+      <div className="flex min-h-[220px] items-center justify-center rounded-2xl border border-accent/20 bg-accent/5 px-6 py-8 text-center text-[13px] text-ink-dim">
         <Sparkles className="h-4 w-4 text-accent" />
         {loadingText}
       </div>
@@ -111,13 +114,18 @@ function AiMarkdownTab({ endpoint, field, active, loadingText }) {
 
   return (
     <div>
+      {regenerateError && (
+        <div className="mb-3 rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-[12px] text-danger">
+          {regenerateError}
+        </div>
+      )}
       <div className="mb-2 flex justify-end">
         <Button type="button" variant="ghost" onClick={regenerate} disabled={regenerating}>
           <RefreshCw className={`h-4 w-4 ${regenerating ? "animate-spin" : ""}`} />
           {regenerating ? "Regenerating..." : "Regenerate"}
         </Button>
       </div>
-      <div className="rounded-xl border border-border bg-surface px-6 py-5">
+      <div className="rounded-2xl border border-border bg-bg-alt/40 px-6 py-6 shadow-sm sm:px-8">
         <ReactMarkdown
             remarkPlugins={[remarkMath, remarkGfm]}
             rehypePlugins={[rehypeKatex]}
@@ -127,9 +135,9 @@ function AiMarkdownTab({ endpoint, field, active, loadingText }) {
         </ReactMarkdown>
       </div>
       {skipped.length > 0 && (
-        <p className="mt-3 text-[12px] text-ink-faint">
+        <div className="mt-4 rounded-xl border border-border bg-bg-alt/40 px-4 py-3 text-[12px] text-ink-faint">
           Not included (unsupported file type): {skipped.join(", ")}
-        </p>
+        </div>
       )}
     </div>
   );

@@ -1,797 +1,472 @@
 import { useEffect, useRef, useState } from "react";
-
 import ReactMarkdown from "react-markdown";
-
 import {
-  Sparkles,
-  RefreshCw,
   ChevronLeft,
   ChevronRight,
+  RefreshCw,
+  Sparkles,
 } from "lucide-react";
-
-import api from "../services/authService";
-
-import Button from "./ui/Button";
-
 import remarkMath from "remark-math";
+import remarkGfm from "remark-gfm";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
-import remarkGfm from "remark-gfm";
 
-const normalizeMath = (text) =>
-  text
-    .replace(/\\\[([\s\S]*?)\\\]/g, (_, m) => `$$${m}$$`)
-    .replace(/\\\(([\s\S]*?)\\\)/g, (_, m) => `$${m}$`);
+import api from "../services/authService";
+import Button from "./ui/Button";
 
-function FlashcardsTab({ unitId, active }) {
+function normalizeMath(text = "") {
+  return String(text)
+    .replace(/\\\(/g, "$")
+    .replace(/\\\)/g, "$")
+    .replace(/\\\[/g, "$$")
+    .replace(/\\\]/g, "$$");
+}
+
+function FlashcardsTab({ unitId, active = true }) {
   const [status, setStatus] = useState("idle");
   const [cards, setCards] = useState([]);
   const [error, setError] = useState("");
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [regenerateError, setRegenerateError] = useState("");
 
-  // null | "next" | "prev"
   const [animation, setAnimation] = useState(null);
+  const [displayIndex, setDisplayIndex] = useState(0);
 
   const startedRef = useRef(false);
+  const animationTimerRef = useRef(null);
 
-  const load = async () => {
-    startedRef.current = true;
+  const currentCard = cards[displayIndex];
+  const totalCards = cards.length;
 
-    setStatus("loading");
-    setError("");
+  const clearAnimationTimer = () => {
+    if (animationTimerRef.current) {
+      clearTimeout(animationTimerRef.current);
+      animationTimerRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      clearAnimationTimer();
+    };
+  }, []);
+
+  const load = async (regenerate = false) => {
+    if (!unitId) return;
 
     try {
-      const res = await api.get(`/units/${unitId}/flashcards`);
+      setError("");
+      if (regenerate) setRegenerateError("");
 
-      setCards(res.data.flashcards || []);
-      setIndex(0);
-      setFlipped(false);
-      setAnimation(null);
-      setStatus("done");
-    } catch (err) {
-      console.error("Flashcards failed:", err);
-
-      const code = err.response?.status;
-      const detail = err.response?.data?.detail;
-
-      if (code === 502) {
-        setError(
-          "The AI is busy right now. Please try again in a moment."
-        );
-      } else if (code === 400 && detail) {
-        setError(detail);
+      if (regenerate) {
+        setRegenerating(true);
       } else {
-        setError("Something went wrong. Please try again.");
+        setStatus("loading");
       }
 
-      setStatus("error");
-    }
-  };
-
-  const regenerate = async () => {
-    setRegenerating(true);
-
-    try {
-      const res = await api.get(
-        `/units/${unitId}/flashcards?regenerate=true`
+      const response = await api.get(
+        `/units/${unitId}/flashcards`,
+        regenerate ? { params: { regenerate: true } } : undefined
       );
 
-      setCards(res.data.flashcards || []);
+      const nextCards = response.data?.flashcards || [];
+
+      clearAnimationTimer();
+      setAnimation(null);
+      setCards(nextCards);
       setIndex(0);
+      setDisplayIndex(0);
       setFlipped(false);
-      setAnimation(null);
+
+      if (regenerate) {
+        setRegenerating(false);
+      } else {
+        setStatus("success");
+      }
     } catch (err) {
-      console.error("Regenerate flashcards failed:", err);
-    } finally {
-      setRegenerating(false);
+      console.error("Failed to load flashcards:", err);
+
+      if (regenerate) {
+        setRegenerateError(
+          err?.response?.data?.detail ||
+            "Couldn't regenerate flashcards. Your existing cards are still available."
+        );
+      }
+
+      setError(
+        err?.response?.data?.detail ||
+          "Unable to load flashcards. Please try again."
+      );
+
+      if (regenerate) {
+        setRegenerating(false);
+      } else {
+        setStatus("error");
+      }
     }
   };
-
-  // --------------------------------------------------
-  // NEXT
-  // --------------------------------------------------
-
-  const goNext = () => {
-    if (
-      index === cards.length - 1 ||
-      animation !== null
-    ) {
-      return;
-    }
-
-    setFlipped(false);
-    setAnimation("next");
-
-    setTimeout(() => {
-      setIndex((i) => Math.min(cards.length - 1, i + 1));
-      setAnimation(null);
-    }, 450);
-  };
-
-  // --------------------------------------------------
-  // PREVIOUS
-  // --------------------------------------------------
-
-  const goPrev = () => {
-    if (
-      index === 0 ||
-      animation !== null
-    ) {
-      return;
-    }
-
-    setFlipped(false);
-    setAnimation("prev");
-
-    setTimeout(() => {
-      setIndex((i) => Math.max(0, i - 1));
-      setAnimation(null);
-    }, 450);
-  };
-
-  // --------------------------------------------------
-  // FETCH ONLY THE FIRST TIME TAB BECOMES ACTIVE
-  // --------------------------------------------------
 
   useEffect(() => {
     if (active && !startedRef.current) {
+      startedRef.current = true;
       load();
     }
-  }, [active]);
+  }, [active, unitId]);
 
-  // --------------------------------------------------
-  // INACTIVE
-  // --------------------------------------------------
+  if (!active) {
+    return null;
+  }
 
-  if (!active) return null;
+  const goNext = () => {
+    if (
+      animation ||
+      cards.length <= 1 ||
+      displayIndex >= cards.length - 1
+    ) {
+      return;
+    }
 
-  // --------------------------------------------------
-  // LOADING
-  // --------------------------------------------------
+    clearAnimationTimer();
 
-  if (status === "loading" || status === "idle") {
+    setFlipped(false);
+    setAnimation("next-out");
+
+    animationTimerRef.current = setTimeout(() => {
+      setDisplayIndex((current) => current + 1);
+      setIndex((current) => current + 1);
+      setAnimation("next-in");
+
+      animationTimerRef.current = setTimeout(() => {
+        setAnimation(null);
+        animationTimerRef.current = null;
+      }, 420);
+    }, 420);
+  };
+
+  const goPrev = () => {
+    if (animation || cards.length <= 1 || displayIndex <= 0) {
+      return;
+    }
+
+    clearAnimationTimer();
+
+    setFlipped(false);
+    setAnimation("prev-out");
+
+    animationTimerRef.current = setTimeout(() => {
+      setDisplayIndex((current) => current - 1);
+      setIndex((current) => current - 1);
+      setAnimation("prev-in");
+
+      animationTimerRef.current = setTimeout(() => {
+        setAnimation(null);
+        animationTimerRef.current = null;
+      }, 420);
+    }, 420);
+  };
+
+  const regenerate = () => {
+    if (regenerating || animation) return;
+    load(true);
+  };
+
+  if (status === "loading") {
     return (
-      <div className="flex items-center gap-3 rounded-xl border border-accent/30 bg-accent/5 px-4 py-3 text-[13px] text-ink-dim">
-        <Sparkles className="h-4 w-4 text-accent" />
+      <div className="flex min-h-[460px] items-center justify-center">
+        <div className="text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-surface">
+            <RefreshCw className="h-5 w-5 animate-spin text-accent" />
+          </div>
 
-        Reading your materials and building flashcards…
+          <p className="text-sm font-medium text-ink">
+            Generating flashcards…
+          </p>
+
+          <p className="mt-1 text-xs text-ink-dim">
+            Turning your material into active-recall questions.
+          </p>
+        </div>
       </div>
     );
   }
-
-  // --------------------------------------------------
-  // ERROR
-  // --------------------------------------------------
 
   if (status === "error") {
     return (
-      <div className="rounded-xl border border-danger/30 bg-danger-soft px-4 py-3">
-        <p className="text-[13px] text-danger">
-          {error}
-        </p>
+      <div className="flex min-h-[460px] items-center justify-center">
+        <div className="max-w-md rounded-2xl border border-danger/30 bg-danger-soft p-6 text-center">
+          <p className="text-sm font-medium text-ink">
+            Couldn&apos;t load flashcards
+          </p>
 
-        <div className="mt-3">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={load}
-          >
-            <RefreshCw className="h-4 w-4" />
+          <p className="mt-2 text-sm leading-6 text-ink-dim">
+            {error}
+          </p>
 
-            Try again
-          </Button>
+          <div className="mt-5">
+            <Button type="button" onClick={() => load()}>
+              Try again
+            </Button>
+          </div>
         </div>
       </div>
     );
   }
 
-  // --------------------------------------------------
-  // NO CARDS
-  // --------------------------------------------------
-
-  if (cards.length === 0) {
+  if (!cards.length) {
     return (
-      <p className="text-[13px] text-ink-faint">
-        No flashcards were generated for this unit.
-      </p>
-    );
-  }
-
-  const card = cards[index];
-
-  const nextCard =
-    animation === "next"
-      ? cards[index + 1]
-      : null;
-
-  const previousCard =
-    animation === "prev"
-      ? cards[index - 1]
-      : null;
-
-  /*
-   * Number of cards still ahead of the current card.
-   * Used only for the decorative stack.
-   */
-  const remaining = cards.length - 1 - index;
-
-  const stackDepth = Math.min(2, remaining);
-
-  // --------------------------------------------------
-  // CARD CONTENT
-  // --------------------------------------------------
-
-  const renderCardContent = (cardData) => {
-    if (!cardData) return null;
-
-    return (
-      <div
-        className="
-          relative
-          h-full
-          min-h-[220px]
-          w-full
-          [transform-style:preserve-3d]
-        "
-      >
-        {/* FRONT — QUESTION */}
-
-        <div
-          className="
-            absolute
-            inset-0
-            flex
-            items-center
-            justify-center
-            overflow-y-auto
-            rounded-xl
-            border
-            border-border
-            bg-surface
-            px-6
-            py-8
-            text-center
-            shadow-sm
-            [backface-visibility:hidden]
-          "
-        >
-          <div className="text-[15px] leading-relaxed text-ink">
-            <ReactMarkdown
-              remarkPlugins={[
-                remarkMath,
-                remarkGfm,
-              ]}
-              rehypePlugins={[rehypeKatex]}
-            >
-              {normalizeMath(cardData.question)}
-            </ReactMarkdown>
+      <div className="flex min-h-[460px] items-center justify-center">
+        <div className="max-w-md rounded-2xl border border-border bg-surface p-8 text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-bg-alt">
+            <Sparkles className="h-5 w-5 text-accent" />
           </div>
-        </div>
 
-        {/* BACK — ANSWER */}
+          <h3 className="text-lg font-semibold text-ink">
+            No flashcards yet
+          </h3>
 
-        <div
-          className="
-            absolute
-            inset-0
-            flex
-            items-center
-            justify-center
-            overflow-y-auto
-            rounded-xl
-            border
-            border-border
-            bg-surface
-            px-6
-            py-8
-            text-center
-            shadow-sm
-            [backface-visibility:hidden]
-            [transform:rotateY(-180deg)]
-          "
-        >
-          <div className="text-[15px] leading-relaxed text-ink">
-            <ReactMarkdown
-              remarkPlugins={[
-                remarkMath,
-                remarkGfm,
-              ]}
-              rehypePlugins={[rehypeKatex]}
+          <p className="mt-2 text-sm leading-6 text-ink-dim">
+            Add some study material to this unit and generate flashcards
+            from it.
+          </p>
+
+          <div className="mt-5">
+            <Button
+              type="button"
+              onClick={regenerate}
+              disabled={regenerating}
             >
-              {normalizeMath(cardData.answer)}
-            </ReactMarkdown>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Generate flashcards
+            </Button>
           </div>
         </div>
       </div>
     );
-  };
+  }
+
+  const progress =
+    totalCards > 0 ? ((displayIndex + 1) / totalCards) * 100 : 0;
+
+  const animationClass =
+    animation === "next-out"
+      ? "flashcard-next-out"
+      : animation === "next-in"
+        ? "flashcard-next-in"
+        : animation === "prev-out"
+          ? "flashcard-prev-out"
+          : animation === "prev-in"
+            ? "flashcard-prev-in"
+            : "";
 
   return (
-    <div className="flex flex-col items-center">
-      {/* -------------------------------------------- */}
-      {/* ANIMATIONS */}
-      {/* -------------------------------------------- */}
-
-      <style>{`
-        /*
-         * NEXT — CURRENT CARD
-         *
-         * Current/top card:
-         * - tilts clockwise
-         * - moves right
-         * - moves slightly down
-         * - gets smaller
-         * - fades out
-         *
-         * It visually travels toward the
-         * bottom/back of the pile.
-         */
-        @keyframes flashcardNextOut {
-          0% {
-            transform:
-              translateX(0)
-              translateY(0)
-              rotate(0deg)
-              scale(1);
-            opacity: 1;
-          }
-
-          25% {
-            transform:
-              translateX(12px)
-              translateY(4px)
-              rotate(2deg)
-              scale(0.99);
-            opacity: 1;
-          }
-
-          60% {
-            transform:
-              translateX(38px)
-              translateY(20px)
-              rotate(5deg)
-              scale(0.94);
-            opacity: 0.8;
-          }
-
-          100% {
-            transform:
-              translateX(70px)
-              translateY(55px)
-              rotate(8deg)
-              scale(0.88);
-            opacity: 0;
-          }
-        }
-
-        /*
-         * NEXT — NEW CARD
-         *
-         * New card:
-         * - starts near the position of the
-         *   underlying card
-         * - starts slightly smaller
-         * - starts transparent
-         * - rises toward the top
-         * - grows slightly
-         * - fades in
-         */
-        @keyframes flashcardNextIn {
-          0% {
-            transform:
-              translateY(10px)
-              scale(0.96);
-            opacity: 0;
-          }
-
-          45% {
-            transform:
-              translateY(5px)
-              scale(0.98);
-            opacity: 0.55;
-          }
-
-          100% {
-            transform:
-              translateY(0)
-              scale(1);
-            opacity: 1;
-          }
-        }
-
-        /*
-         * PREVIOUS — CURRENT CARD
-         *
-         * Current/top card:
-         * - becomes slightly smaller
-         * - moves downward
-         * - fades out
-         */
-        @keyframes flashcardPrevOut {
-          0% {
-            transform:
-              translateY(0)
-              scale(1);
-            opacity: 1;
-          }
-
-          45% {
-            transform:
-              translateY(12px)
-              scale(0.97);
-            opacity: 0.65;
-          }
-
-          100% {
-            transform:
-              translateY(48px)
-              scale(0.91);
-            opacity: 0;
-          }
-        }
-
-        /*
-         * PREVIOUS — PREVIOUS CARD
-         *
-         * This is the mirror/opposite of Next Out.
-         *
-         * The previous card:
-         * - starts at the bottom-left
-         * - starts smaller
-         * - starts transparent
-         * - is tilted counter-clockwise
-         * - moves diagonally toward the center/top
-         * - becomes straight
-         * - grows to normal size
-         * - fades in
-         */
-        @keyframes flashcardPrevIn {
-          0% {
-            transform:
-              translateX(-70px)
-              translateY(55px)
-              rotate(-8deg)
-              scale(0.88);
-            opacity: 0;
-          }
-
-          35% {
-            transform:
-              translateX(-38px)
-              translateY(20px)
-              rotate(-5deg)
-              scale(0.94);
-            opacity: 0.55;
-          }
-
-          65% {
-            transform:
-              translateX(-12px)
-              translateY(5px)
-              rotate(-2deg)
-              scale(0.98);
-            opacity: 0.85;
-          }
-
-          100% {
-            transform:
-              translateX(0)
-              translateY(0)
-              rotate(0deg)
-              scale(1);
-            opacity: 1;
-          }
-        }
-      `}</style>
-
-      {/* -------------------------------------------- */}
-      {/* CARD COUNTER */}
-      {/* -------------------------------------------- */}
-
-      <div className="mb-3 text-[12px] text-ink-faint">
-        {index + 1} / {cards.length}
-      </div>
-
-      {/* -------------------------------------------- */}
-      {/* TOPIC */}
-      {/* -------------------------------------------- */}
-
-      {card.topic && (
-        <div className="mb-3 rounded-full border border-accent/30 bg-accent/5 px-3 py-1 text-[11px] font-medium text-accent">
-          {card.topic}
+    <section className="mx-auto w-full max-w-[920px]">
+      {regenerateError && (
+        <div className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-[12px] text-danger">
+          <p className="leading-relaxed">{regenerateError}</p>
+          <button
+            type="button"
+            onClick={() => setRegenerateError("")}
+            className="shrink-0 rounded-md px-1 text-current opacity-70 hover:opacity-100"
+            aria-label="Dismiss flashcard regeneration error"
+          >
+            ×
+          </button>
         </div>
       )}
 
-      {/* -------------------------------------------- */}
-      {/* CARD AREA */}
-      {/* -------------------------------------------- */}
+      {/* Header */}
+      <div className="mb-7 flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-accent" />
 
-      <div
-        className="relative w-full max-w-xl"
-        style={{
-          minHeight: 240,
-        }}
-      >
-        {/* ------------------------------------------ */}
-        {/* DECORATIVE CARDS BEHIND */}
-        {/* ------------------------------------------ */}
-
-        {Array.from(
-          { length: stackDepth },
-          (_, i) => i + 1
-        )
-          .reverse()
-          .map((depth) => (
-            <div
-              key={`stack-${depth}`}
-              className="
-                absolute
-                inset-0
-                rounded-xl
-                border
-                border-border
-                bg-surface
-              "
-              style={{
-                transform: `
-                  translateY(${depth * 10}px)
-                  scale(${1 - depth * 0.04})
-                `,
-                opacity: 1 - depth * 0.3,
-                zIndex: 10 - depth,
-              }}
-            />
-          ))}
-
-        {/* ------------------------------------------ */}
-        {/* NEXT ANIMATION */}
-        {/* ------------------------------------------ */}
-
-        {animation === "next" && nextCard && (
-          <>
-            {/* NEW CARD COMING UP */}
-
-            <div
-              className="
-                absolute
-                inset-0
-                z-10
-                [perspective:1200px]
-              "
-              style={{
-                minHeight: 220,
-                animation:
-                  "flashcardNextIn 450ms ease-out forwards",
-              }}
-            >
-              {renderCardContent(nextCard)}
-            </div>
-
-            {/* CURRENT CARD GOING TO BACK */}
-
-            <div
-              className="
-                absolute
-                inset-0
-                z-30
-                [perspective:1200px]
-              "
-              style={{
-                minHeight: 220,
-                animation:
-                  "flashcardNextOut 450ms ease-in forwards",
-              }}
-            >
-              {renderCardContent(card)}
-            </div>
-          </>
-        )}
-
-        {/* ------------------------------------------ */}
-        {/* PREVIOUS ANIMATION */}
-        {/* ------------------------------------------ */}
-
-        {animation === "prev" && previousCard && (
-          <>
-            {/* PREVIOUS CARD COMING FROM
-                BOTTOM-LEFT TO CENTER */}
-
-            <div
-              className="
-                absolute
-                inset-0
-                z-10
-                [perspective:1200px]
-              "
-              style={{
-                minHeight: 220,
-                animation:
-                  "flashcardPrevIn 450ms ease-out forwards",
-              }}
-            >
-              {renderCardContent(previousCard)}
-            </div>
-
-            {/* CURRENT CARD MOVING DOWN */}
-
-            <div
-              className="
-                absolute
-                inset-0
-                z-30
-                [perspective:1200px]
-              "
-              style={{
-                minHeight: 220,
-                animation:
-                  "flashcardPrevOut 450ms ease-in forwards",
-              }}
-            >
-              {renderCardContent(card)}
-            </div>
-          </>
-        )}
-
-        {/* ------------------------------------------ */}
-        {/* NORMAL ACTIVE CARD */}
-        {/* ------------------------------------------ */}
-
-        {animation === null && (
-          <div
-            key={index}
-            onClick={() => {
-              if (animation === null) {
-                setFlipped((f) => !f);
-              }
-            }}
-            className="
-              relative
-              z-20
-              cursor-pointer
-              [perspective:1200px]
-            "
-            style={{
-              minHeight: 220,
-            }}
-          >
-            <div
-              className={`
-                relative
-                h-full
-                min-h-[220px]
-                w-full
-                transition-transform
-                duration-500
-                [transform-style:preserve-3d]
-
-                ${
-                  flipped
-                    ? "[transform:rotateY(-180deg)]"
-                    : ""
-                }
-              `}
-            >
-              {/* FRONT — QUESTION */}
-
-              <div
-                className="
-                  absolute
-                  inset-0
-                  flex
-                  items-center
-                  justify-center
-                  overflow-y-auto
-                  rounded-xl
-                  border
-                  border-border
-                  bg-surface
-                  px-6
-                  py-8
-                  text-center
-                  shadow-sm
-                  transition-colors
-                  hover:border-accent/40
-                  [backface-visibility:hidden]
-                "
-              >
-                <div className="text-[15px] leading-relaxed text-ink">
-                  <ReactMarkdown
-                    remarkPlugins={[
-                      remarkMath,
-                      remarkGfm,
-                    ]}
-                    rehypePlugins={[rehypeKatex]}
-                  >
-                    {normalizeMath(card.question)}
-                  </ReactMarkdown>
-                </div>
-              </div>
-
-              {/* BACK — ANSWER */}
-
-              <div
-                className="
-                  absolute
-                  inset-0
-                  flex
-                  items-center
-                  justify-center
-                  overflow-y-auto
-                  rounded-xl
-                  border
-                  border-border
-                  bg-surface
-                  px-6
-                  py-8
-                  text-center
-                  shadow-sm
-                  [backface-visibility:hidden]
-                  [transform:rotateY(-180deg)]
-                "
-              >
-                <div className="text-[15px] leading-relaxed text-ink">
-                  <ReactMarkdown
-                    remarkPlugins={[
-                      remarkMath,
-                      remarkGfm,
-                    ]}
-                    rehypePlugins={[rehypeKatex]}
-                  >
-                    {normalizeMath(card.answer)}
-                  </ReactMarkdown>
-                </div>
-              </div>
-            </div>
+            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">
+              Active recall
+            </span>
           </div>
-        )}
+
+          <h2
+            className="mt-1 text-2xl text-ink sm:text-3xl"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            Flashcards
+          </h2>
+
+          <p className="mt-1 text-sm text-ink-dim">
+            Test yourself before revealing the answer.
+          </p>
+        </div>
+
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={regenerate}
+          disabled={regenerating || Boolean(animation)}
+        >
+          <RefreshCw
+            className={`mr-2 h-4 w-4 ${
+              regenerating ? "animate-spin" : ""
+            }`}
+          />
+          {regenerating ? "Regenerating…" : "Regenerate"}
+        </Button>
       </div>
 
-      {/* -------------------------------------------- */}
-      {/* FLIP HINT */}
-      {/* -------------------------------------------- */}
+      {/* Progress */}
+      <div className="mb-6 rounded-xl border border-border bg-bg-alt/40 px-4 py-3">
+        <div className="mb-2 flex items-center justify-between text-xs text-ink-dim">
+          <span>
+            Card {displayIndex + 1} of {totalCards}
+          </span>
 
-      <p className="mt-2 text-[12px] text-ink-faint">
-        {flipped
-          ? "Click to see the question"
-          : "Click to reveal the answer"}
-      </p>
+          <span>{Math.round(progress)}%</span>
+        </div>
 
-      {/* -------------------------------------------- */}
-      {/* NAVIGATION */}
-      {/* -------------------------------------------- */}
+        <div className="h-1.5 overflow-hidden rounded-full bg-border/70">
+          <div
+            className="h-full rounded-full bg-accent transition-all duration-300"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
 
-      <div className="mt-5 flex items-center gap-3">
+      {/* Topic */}
+      {currentCard?.topic && (
+        <div className="mb-5 flex justify-center">
+          <span className="rounded-full border border-teal/20 bg-teal-soft px-3 py-1 text-xs font-medium text-teal">
+            {currentCard.topic}
+          </span>
+        </div>
+      )}
+
+      {/* Card area */}
+      <div className="relative mx-auto h-[380px] w-full max-w-[700px] sm:h-[420px]">
+        {/* Decorative cards behind the active card */}
+        <div className="absolute inset-x-4 top-3 bottom-0 rounded-3xl border border-border bg-surface opacity-60 sm:inset-x-7" />
+
+        <div className="absolute inset-x-2 top-1 bottom-2 rounded-3xl border border-border bg-bg-alt opacity-80 sm:inset-x-4" />
+
+        {/* Animated active card */}
+        <div
+          key={displayIndex}
+          className={`flashcard-stage absolute inset-0 ${animationClass}`}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              if (!animation) {
+                setFlipped((value) => !value);
+              }
+            }}
+            disabled={Boolean(animation)}
+            className="flashcard-perspective h-full w-full text-left"
+            aria-label={
+              flipped
+                ? "Flashcard answer. Click to show question."
+                : "Flashcard question. Click to reveal answer."
+            }
+          >
+            <div
+              className={`flashcard-inner relative h-full w-full ${
+                flipped ? "is-flipped" : ""
+              }`}
+            >
+              {/* Front */}
+              <div className="flashcard-face flashcard-front absolute inset-0 overflow-hidden rounded-3xl border border-border bg-surface p-7 shadow-2xl sm:p-10">
+                <div className="flex h-full flex-col">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-faint">
+                      Question
+                    </span>
+
+                    <span className="rounded-full bg-bg-alt px-2.5 py-1 text-[11px] text-ink-faint">
+                      Click to flip
+                    </span>
+                  </div>
+
+                  <div className="flex flex-1 items-center justify-center py-8">
+                    <div className="w-full text-center text-xl leading-relaxed text-ink sm:text-2xl">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkMath, remarkGfm]}
+                        rehypePlugins={[rehypeKatex]}
+                      >
+                        {normalizeMath(currentCard?.question || "")}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+
+                  <div className="text-center text-xs text-ink-faint">
+                    Think of the answer before revealing it.
+                  </div>
+                </div>
+              </div>
+
+              {/* Back */}
+              <div className="flashcard-face flashcard-back absolute inset-0 overflow-hidden rounded-3xl border border-accent/30 bg-bg-alt p-7 shadow-2xl sm:p-10">
+                <div className="flex h-full flex-col">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-accent">
+                      Answer
+                    </span>
+
+                    <span className="rounded-full bg-surface px-2.5 py-1 text-[11px] text-ink-faint">
+                      Click to flip back
+                    </span>
+                  </div>
+
+                  <div className="flex flex-1 items-center justify-center py-8">
+                    <div className="w-full text-center text-lg leading-relaxed text-ink sm:text-xl">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkMath, remarkGfm]}
+                        rehypePlugins={[rehypeKatex]}
+                      >
+                        {normalizeMath(currentCard?.answer || "")}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+
+                  <div className="text-center text-xs text-ink-faint">
+                    Recall complete.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* Navigation */}
+      <div className="mt-7 flex items-center justify-between">
         <Button
           type="button"
-          variant="ghost"
+          variant="secondary"
           onClick={goPrev}
-          disabled={
-            index === 0 ||
-            animation !== null
-          }
+          disabled={displayIndex === 0 || Boolean(animation)}
         >
-          <ChevronLeft className="h-4 w-4" />
-
-          Prev
+          <ChevronLeft className="mr-1.5 h-4 w-4" />
+          Previous
         </Button>
 
+        <div className="text-xs text-ink-faint">
+          {displayIndex === totalCards - 1
+            ? "End of deck"
+            : "Keep going"}
+        </div>
+
         <Button
           type="button"
-          variant="ghost"
           onClick={goNext}
           disabled={
-            index === cards.length - 1 ||
-            animation !== null
+            displayIndex === totalCards - 1 || Boolean(animation)
           }
         >
           Next
-
-          <ChevronRight className="h-4 w-4" />
+          <ChevronRight className="ml-1.5 h-4 w-4" />
         </Button>
       </div>
-    </div>
+    </section>
   );
 }
 
