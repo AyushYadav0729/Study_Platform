@@ -89,15 +89,19 @@ function AddSubjectModal({ open, onClose, onAdd }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-[2px]"
       onClick={handleClose}
     >
       <div
-        className="w-full max-w-[400px] rounded-xl border border-border bg-surface p-6 shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-subject-title"
+        className="w-full max-w-[440px] rounded-2xl border border-border bg-surface p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-5 flex items-center justify-between">
+        <div className="mb-6 flex items-center justify-between">
           <h3
+            id="add-subject-title"
             className="text-[1.2rem] text-ink"
             style={{ fontFamily: "var(--font-display)" }}
           >
@@ -108,7 +112,7 @@ function AddSubjectModal({ open, onClose, onAdd }) {
             onClick={handleClose}
             disabled={submitting}
             aria-label="Close"
-            className="rounded-md p-1 text-ink-faint hover:bg-surface-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-faint transition-colors hover:bg-surface-hover hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
           >
             <X className="h-4 w-4" />
           </button>
@@ -141,7 +145,7 @@ function AddSubjectModal({ open, onClose, onAdd }) {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={submitting}
-                className="flex items-center gap-1 text-[13px] font-medium text-accent hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex items-center gap-1 rounded-md text-[13px] font-medium text-accent hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Upload className="h-3.5 w-3.5" />
                 Upload PDF
@@ -164,7 +168,7 @@ function AddSubjectModal({ open, onClose, onAdd }) {
                   onClick={handleRemoveFile}
                   disabled={submitting}
                   aria-label="Remove file"
-                  className="ml-2 shrink-0 rounded-md p-1 text-ink-faint hover:bg-surface-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+                  className="ml-2 shrink-0 rounded-md p-1 text-ink-faint hover:bg-surface-hover hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -178,7 +182,7 @@ function AddSubjectModal({ open, onClose, onAdd }) {
                 value={syllabus}
                 onChange={(e) => setSyllabus(e.target.value)}
                 disabled={submitting}
-                className="w-full resize-none rounded-lg border border-border bg-bg-alt/40 px-3.5 py-2.5 text-[15px] text-ink placeholder:text-ink-faint outline-none transition-colors focus:border-accent disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-full resize-none rounded-xl border border-border bg-bg-alt/40 px-3.5 py-2.5 text-[14px] leading-6 text-ink outline-none placeholder:text-ink-faint transition-all focus:border-accent/70 focus:ring-2 focus:ring-accent/10 disabled:cursor-not-allowed disabled:opacity-50"
               />
             )}
             {fileError && (
@@ -186,7 +190,7 @@ function AddSubjectModal({ open, onClose, onAdd }) {
             )}
           </div>
 
-          <div className="mt-1 flex justify-end gap-2.5">
+          <div className="mt-2 flex justify-end gap-2.5">
             <Button type="button" variant="ghost" onClick={handleClose} disabled={submitting}>
               Cancel
             </Button>
