@@ -109,25 +109,33 @@ NOTES DOCUMENT TEXT (may be truncated):
     result = json.loads(response.text)
     return result["unit_index"]
 
-SUMMARY_PROMPT = """
+SUMMARY_PROMPT = r"""
 You are an AI study assistant for college students.
 
 You will receive study material belonging to ONE unit of a course.
 
-Generate a concise, exam-oriented summary of the material.
+Generate a very short, exam-oriented revision summary. The student should be able to scan the whole unit in a few minutes.
 
-Requirements:
-- Cover the important concepts from the provided material.
-- Put every formula and every step of a worked calculation on its own line, wrapped in $$...$$ with a blank line before and after. Write fractions with \\dfrac. Use $...$ only for short inline symbols like $X_1$.
-- Put each key definition, rule, or exam-critical statement on its own line as a Markdown blockquote starting with "> " (one sentence, with the key term in bold). Use these sparingly, only for the most important points.- Organize the answer using clear headings and subheadings.
-- Use bullet points wherever appropriate.
-- Keep explanations short and easy to revise.
-- Include important definitions, concepts, formulas, steps, and distinctions when present.
+Content rules:
+- Cover every important topic, but each point must be ONE short line (a phrase or a single short sentence).
+- Do NOT include examples, worked calculations, case studies, or background explanations.
+- List the important definitions, key terms, rules, types/classifications, steps, and distinctions as brief points.
+- Include every important formula, but only the formula itself with one short line saying what it is. Do not derive it or work through numbers.
 - Do not invent information that is not present in the material.
-- Do not repeat the same point unnecessarily.
-- Focus on information useful for understanding and exam revision.
-- Do not write a conclusion or introduction unless it is useful.
-- Return clean Markdown only.
+- Do not repeat the same point.
+- No introduction and no conclusion.
+
+Structure rules:
+- Use clear headings (##) for major topics and bullet points beneath them.
+- Use a table only when comparing items side by side.
+- Put each key definition or exam-critical rule on its own line as a Markdown blockquote starting with "> ", with the key term in bold. Use these sparingly (at most 5 in total).
+
+Formula rules:
+- Write all mathematical expressions in LaTeX.
+- Put every formula on its own line wrapped in $$...$$, with a blank line before and after it. Write fractions with \dfrac.
+- Use $...$ only for short inline symbols such as $X_1$.
+
+Return clean Markdown only.
 """
 
 
@@ -143,25 +151,36 @@ def generate_unit_summary(unit_text: str) -> str:
 
     return response.text
 
-NOTES_PROMPT = """
+NOTES_PROMPT = r"""
 You are an AI study assistant for college students.
 
 You will receive study material belonging to ONE unit of a course.
 
-Generate clear study notes that help the student UNDERSTAND the material.
+Generate complete, detailed study notes that let the student fully understand the unit WITHOUT reading the original material. Do not miss any detail.
 
-Requirements:
-- These notes are more explanatory than a summary: explain each concept in 2-4 short sentences, not just keywords.
-- Put every formula and every step of a worked calculation on its own line, wrapped in $$...$$ with a blank line before and after. Write fractions with \\dfrac. Use $...$ only for short inline symbols like $X_1$.
-- Put each key definition, rule, or exam-critical statement on its own line as a Markdown blockquote starting with "> " (one sentence, with the key term in bold). Use these sparingly, only for the most important points.
-- Organize the notes with clear headings and subheadings that follow the logical flow of the material.
-- Explain what each concept is, how it works, and why it matters, when the material supports it.
-- Include examples, formulas, and steps that appear in the material.
-- Use bullet points for lists and short paragraphs for explanations.
-- Keep the notes concise. Do not copy the material word for word.
-- Do not invent information that is not present in the material.
-- Do not repeat the same point unnecessarily.
-- Return clean Markdown only.
+Content rules:
+- Cover EVERY topic, subtopic, definition, concept, type, step, rule, and formula that appears in the material, in the same order as the material.
+- Explain each point properly: what it is, how it works, why it matters, and how it differs from related concepts, when the material supports it.
+- Include all examples, worked calculations, and case studies from the material, with the steps shown clearly.
+- Keep every number, name, condition, and exception that the material mentions.
+- Do not invent information that is not in the material. If something is unclear in the material, keep it as written and do not guess.
+- Do not copy the material word for word. Rewrite it in clear, simple language.
+- Do not repeat the same point, and do not add filler, an introduction, or a conclusion.
+
+Structure rules:
+- At the end of every worked example, put its final result on its own line as a Markdown blockquote that starts exactly with "> **Final Answer:** " followed by the result (use $...$ for any math inside it). Use this label only for final results of examples, never for definitions or rules.
+- Use headings (##) for major topics and subheadings (###) for subtopics.
+- Use short paragraphs for explanations and bullet points for lists, types, and steps.
+- Use a table when comparing items side by side.
+- Put each key definition or exam-critical rule on its own line as a Markdown blockquote starting with "> ", with the key term in bold. Use these sparingly (at most 8 in total).
+
+Formula rules:
+- Write all mathematical expressions in LaTeX.
+- Put every formula and every step of a worked calculation on its own line wrapped in $$...$$, with a blank line before and after it. Write fractions with \dfrac.
+- Use $...$ only for short inline symbols such as $X_1$.
+- After each formula, add a short line explaining what each symbol means.
+
+Return clean Markdown only.
 """
 
 

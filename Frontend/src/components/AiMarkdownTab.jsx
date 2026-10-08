@@ -8,6 +8,14 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import remarkGfm from "remark-gfm";
 
+// Pulls plain text out of React children (used to detect "Final Answer" blockquotes)
+const getText = (node) => {
+  if (typeof node === "string") return node;
+  if (Array.isArray(node)) return node.map(getText).join("");
+  if (node?.props?.children) return getText(node.props.children);
+  return "";
+};
+
 // Styling for the Markdown Gemini returns (no typography plugin needed)
 const mdComponents = {
   table: (p) => (
@@ -27,14 +35,24 @@ const mdComponents = {
   li: (p) => <li className="leading-[1.8] pl-1" {...p} />,
   strong: (p) => <strong className="font-semibold text-ink" {...p} />,
   code: (p) => <code className="rounded bg-bg-alt px-1.5 py-0.5 text-[13.5px] text-ink" {...p} />,
-  // keep your existing table / thead / th / td lines here unchanged
-  blockquote: (p) => (
-    <blockquote
-      className="my-5 rounded-lg border border-l-4 border-accent/40 border-l-accent bg-accent/10 px-5 py-3 [&>p]:my-1"
-      {...p}
-    />
-  ),
+
+  // Two kinds of blockquote:
+  //  - starts with "Final Answer"  -> thin centered outline box (like formulas)
+  //  - anything else               -> highlighted key-point box with accent bar
+  blockquote: ({ node, children }) => {
+    const isAnswer = getText(children).trim().startsWith("Final Answer");
+    return isAnswer ? (
+      <blockquote className="mx-auto my-5 w-fit max-w-full rounded border border-ink-faint px-5 py-3 [&>p]:my-0">
+        {children}
+      </blockquote>
+    ) : (
+      <blockquote className="my-5 rounded-lg border border-l-4 border-accent/40 border-l-accent bg-accent/10 px-5 py-3 [&>p]:my-1">
+        {children}
+      </blockquote>
+    );
+  },
 };
+
 const normalizeMath = (text) =>
   text
     .replace(/\\\[([\s\S]*?)\\\]/g, (_, m) => `$$${m}$$`)
@@ -132,13 +150,13 @@ function AiMarkdownTab({ endpoint, field, active, loadingText }) {
           {regenerating ? "Regenerating..." : "Regenerate"}
         </Button>
       </div>
-      <div className="rounded-2xl border border-border bg-bg-alt/40 px-6 py-6 shadow-sm sm:px-8">
+      <div className="ai-md rounded-2xl border border-border bg-bg-alt/40 px-6 py-6 shadow-sm sm:px-8">
         <ReactMarkdown
-            remarkPlugins={[remarkMath, remarkGfm]}
-            rehypePlugins={[rehypeKatex]}
-            components={mdComponents}
-            >
-            {normalizeMath(content)}
+          remarkPlugins={[remarkMath, remarkGfm]}
+          rehypePlugins={[rehypeKatex]}
+          components={mdComponents}
+        >
+          {normalizeMath(content)}
         </ReactMarkdown>
       </div>
       {skipped.length > 0 && (
