@@ -7,20 +7,20 @@ function Alert({ variant = "error", children, onDismiss }) {
   return (
     <div
       role="alert"
-      className={`mb-5 flex items-start gap-2.5 rounded-lg border px-3.5 py-3 text-[14px] ${
+      className={`mb-5 flex items-start gap-3 rounded-xl border px-4 py-3.5 text-[13px] shadow-sm ${
         isError
           ? "border-danger/30 bg-danger-soft text-danger"
           : "border-teal/30 bg-teal-soft text-teal"
       }`}
     >
       <Icon className="mt-0.5 h-4 w-4 shrink-0" />
-      <p className="flex-1 leading-snug">{children}</p>
+      <p className="flex-1 leading-relaxed">{children}</p>
       {onDismiss && (
         <button
           type="button"
           onClick={onDismiss}
           aria-label="Dismiss"
-          className="shrink-0 opacity-60 hover:opacity-100"
+          className="rounded-md p-0.5 text-current opacity-60 transition-opacity hover:opacity-100"
         >
           <X className="h-4 w-4" />
         </button>

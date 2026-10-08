@@ -3,7 +3,15 @@ import { ChevronDown, Check, Plus, Sparkles } from "lucide-react";
 
 export const AI_RECOMMEND_VALUE = "ai_recommend";
 
-function UnitSelect({ units, value, onChange, onAddUnit, placeholder = "No units yet", disabled = false }) {
+function UnitSelect({
+  units,
+  value,
+  onChange,
+  onAddUnit,
+  placeholder = "No units yet",
+  disabled = false,
+  syllabusParsed = false,
+}) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);
 
@@ -33,7 +41,9 @@ function UnitSelect({ units, value, onChange, onAddUnit, placeholder = "No units
         type="button"
         onClick={() => !disabled && setOpen((o) => !o)}
         disabled={disabled}
-        className="flex w-full items-center justify-between rounded-lg border border-border bg-bg-alt/60 px-3.5 py-2.5 text-left text-[15px] text-ink outline-none transition-colors focus:border-accent hover:border-accent/40 disabled:cursor-not-allowed disabled:opacity-50"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        className="flex w-full items-center justify-between rounded-lg border border-border bg-bg-alt/60 px-3.5 py-2.5 text-left text-[15px] text-ink outline-none transition-colors focus:border-accent hover:border-accent/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
       >
         <span className={selectedUnit || isAiSelected ? "text-ink" : "text-ink-faint"}>
           {isAiSelected ? "AI recommendation" : selectedUnit ? selectedUnit.name : placeholder}
@@ -54,7 +64,7 @@ function UnitSelect({ units, value, onChange, onAddUnit, placeholder = "No units
                 onChange(AI_RECOMMEND_VALUE);
                 setOpen(false);
               }}
-              className="flex w-full items-center justify-between border-b border-border px-3.5 py-2.5 text-left text-[14px] font-medium text-accent transition-colors hover:bg-surface-hover"
+              className="flex w-full items-center justify-between border-b border-border px-3.5 py-2.5 text-left text-[14px] font-medium text-accent transition-colors hover:bg-surface-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
             >
               <span className="flex items-center gap-1.5">
                 <Sparkles className="h-3.5 w-3.5" />
@@ -74,7 +84,7 @@ function UnitSelect({ units, value, onChange, onAddUnit, placeholder = "No units
                       onChange(unit.id);
                       setOpen(false);
                     }}
-                    className="flex w-full items-center justify-between px-3.5 py-2.5 text-left text-[14px] text-ink transition-colors hover:bg-surface-hover"
+                    className="flex w-full items-center justify-between px-3.5 py-2.5 text-left text-[14px] text-ink transition-colors hover:bg-surface-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
                   >
                     {unit.name}
                     {unit.id === value && (
@@ -98,7 +108,7 @@ function UnitSelect({ units, value, onChange, onAddUnit, placeholder = "No units
               setOpen(false);
               onAddUnit();
             }}
-            className={`flex w-full items-center gap-1.5 px-3.5 py-2.5 text-left text-[14px] font-medium text-accent transition-colors hover:bg-surface-hover ${
+            className={`flex w-full items-center gap-1.5 px-3.5 py-2.5 text-left text-[14px] font-medium text-accent transition-colors hover:bg-surface-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${
               units.length > 0 ? "border-t border-border" : ""
             }`}
           >

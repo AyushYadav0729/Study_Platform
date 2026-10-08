@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Home from "./pages/Home";
@@ -6,19 +7,19 @@ import Subject from "./pages/Subject";
 import Unit from "./pages/Unit";
 
 import ProtectedRoute from "./components/ProtectedRoute";
+import AppLayout from "./components/layout/AppLayout";
 import { useSubjects } from "./hooks/useSubjects";
 import { authService } from "./services/authService";
 
-
 function App() {
   const {
-  subjects,
-  loading,
-  addSubject,
-  updateSubject,
-  refreshSubjects,
-  removeSubject,
-  clearSubjects,
+    subjects,
+    loading,
+    addSubject,
+    updateSubject,
+    refreshSubjects,
+    removeSubject,
+    clearSubjects,
   } = useSubjects();
 
   return (
@@ -29,48 +30,70 @@ function App() {
             path="/"
             element={
               <Navigate
-                to={authService.isAuthenticated() ? "/dashboard" : "/login"}
+                to={
+                  authService.isAuthenticated()
+                    ? "/dashboard"
+                    : "/login"
+                }
                 replace
               />
             }
           />
+
           <Route
             path="/login"
             element={<Login onLogin={refreshSubjects} />}
           />
-          <Route path="/register" element={<Register />} />
+
           <Route
-            path="/dashboard"
+            path="/register"
+            element={<Register />}
+          />
+
+          <Route
             element={
               <ProtectedRoute>
+                <AppLayout
+                  subjects={subjects}
+                  onAddSubject={addSubject}
+                  onClearSubjects={clearSubjects}
+                />
+              </ProtectedRoute>
+            }
+          >
+            <Route
+              path="/dashboard"
+              element={
                 <Home
                   subjects={subjects}
                   subjectsLoading={loading}
                   onAddSubject={addSubject}
-                  onRefreshSubjects={refreshSubjects}
-                  onClearSubjects={clearSubjects}
                   onRemoveSubject={removeSubject}
                 />
-              </ProtectedRoute>
-            }
-          />
+              }
+            />
+
+            <Route
+              path="/subject/:id"
+              element={
+                <Subject
+                  subjects={subjects}
+                  onRemoveSubject={removeSubject}
+                  onUpdateSubject={updateSubject}
+                />
+              }
+            />
+
+            <Route
+              path="/subject/:id/unit/:unitId"
+              element={<Unit subjects={subjects} />}
+            />
+          </Route>
+
           <Route
-            path="/subject/:id"
-            element={
-              <ProtectedRoute>
-                 <Subject subjects={subjects} onRemoveSubject={removeSubject} onUpdateSubject={updateSubject} />
-              </ProtectedRoute>
-            }
+            path="*"
+            element={<Navigate to="/" replace />}
           />
-          <Route
-            path="/subject/:id/unit/:unitId"
-            element={
-              <ProtectedRoute>
-                <Unit subjects={subjects} />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
     </BrowserRouter>
