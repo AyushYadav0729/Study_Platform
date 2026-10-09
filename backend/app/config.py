@@ -16,3 +16,6 @@ SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET")
 SUPABASE_SECRET_KEY = os.getenv("SUPABASE_SECRET_KEY")
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+# Experimental: figures inside AI notes. Off unless explicitly enabled.
+FIGURES_ENABLED = os.getenv("FIGURES_ENABLED", "false").lower() == "true"

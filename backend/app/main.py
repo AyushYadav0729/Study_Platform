@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.config import SUPABASE_BUCKET, FIGURES_ENABLED
+from app.figure_pipeline import collect_unit_text_with_figures, resolve_figure_markers, clear_figures_folder, figures_folder
 from app.supabase_client import supabase
 from app.models import User, Subject, Unit, Note, UnitContent
 from app.config import SUPABASE_BUCKET
@@ -36,6 +38,7 @@ from uuid import UUID
 import json
 import hashlib
 from datetime import datetime
+
 
 app = FastAPI()
 app.add_middleware(
@@ -142,6 +145,23 @@ def get_subjects(
 
     return subjects
 
+def remove_unit_storage(unit: Unit, user_id, db: Session):
+    """
+    Removes every uploaded file and extracted figure of a unit from Supabase Storage.
+    Best-effort: a Storage hiccup is logged and never blocks the delete.
+    """
+    notes = db.query(Note).filter(Note.unit_id == unit.id).all()
+
+    for n in notes:
+        clear_figures_folder(figures_folder(user_id, unit, n))
+
+    paths = [n.file_path for n in notes]
+    if paths:
+        try:
+            supabase.storage.from_(SUPABASE_BUCKET).remove(paths)
+        except Exception as e:
+            print(f"[storage] could not remove files of unit {unit.id}: {e}")
+
 @app.delete("/subjects/{subject_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_subject(
     subject_id: UUID,
@@ -158,6 +178,8 @@ def delete_subject(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Subject not found"
         )
+    for u in db.query(Unit).filter(Unit.subject_id == subject.id).all():
+        remove_unit_storage(u, current_user.id, db)
 
     db.delete(subject)
     db.commit()
@@ -231,7 +253,7 @@ def delete_unit(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Unit not found"
         )
-
+    remove_unit_storage(unit, current_user.id, db)
     db.delete(unit)
     db.commit()
 
@@ -365,7 +387,8 @@ def delete_note(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"File deletion failed: {str(e)}"
         )
-
+    # Also remove this file's extracted figures (best-effort, never blocks the delete)
+    clear_figures_folder(figures_folder(current_user.id, note.unit, note))
     db.delete(note)
     db.commit()
 
@@ -459,7 +482,7 @@ def collect_unit_text(unit: Unit, db: Session):
 
     return "\n\n".join(parts), files_used, files_skipped
 
-def get_or_generate(unit: Unit, content_type: str, generator, db: Session, regenerate: bool = False):
+def get_or_generate(unit: Unit, content_type: str, generator, db: Session, regenerate: bool = False, collect=None):
     """
     Returns (content, files_used, files_skipped, cached).
     Uses the stored result if it exists and the unit's files haven't changed;
@@ -479,7 +502,8 @@ def get_or_generate(unit: Unit, content_type: str, generator, db: Session, regen
         meta = row.meta or {}
         return row.content, meta.get("files_used", []), meta.get("files_skipped", []), True
 
-    combined_text, files_used, files_skipped = collect_unit_text(unit, db)
+    collector = collect or collect_unit_text
+    combined_text, files_used, files_skipped = collector(unit, db)
 
     try:
         content = generator(combined_text)
@@ -558,9 +582,14 @@ def get_unit_ai_notes(
     db: Session = Depends(get_db)
 ):
     unit = get_owned_unit(unit_id, current_user, db)
+    collect = None
+    if FIGURES_ENABLED:
+        collect = lambda u, d: collect_unit_text_with_figures(u, current_user.id, d)
+
     content, used, skipped, cached = get_or_generate(
-        unit, "notes", generate_unit_notes, db, regenerate
+        unit, "notes", generate_unit_notes, db, regenerate, collect=collect
     )
+    content = resolve_figure_markers(content, unit, current_user.id, db)
     return {
         "unit_id": unit.id,
         "unit_name": unit.name,

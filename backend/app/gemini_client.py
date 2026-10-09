@@ -3,9 +3,40 @@ from google import genai
 from google.genai import types
 from app.config import GEMINI_API_KEY
 from pydantic import BaseModel
+import time
+from google.genai import errors
 
 client = genai.Client(api_key=GEMINI_API_KEY)
-m = "gemini-3.5-flash"
+# Tried in order. If the first model keeps failing with a temporary error,
+# the next one is used. Check the fallback name is available on your API key.
+MODELS = ["gemini-3.5-flash", "gemini-2.5-flash"]
+
+# Temporary errors worth retrying: rate limit / overloaded / server error
+RETRYABLE_CODES = {429, 500, 503, 504}
+
+
+def _generate_with_retry(contents, config, attempts_per_model: int = 3):
+    last_error = None
+
+    for model in MODELS:
+        for attempt in range(attempts_per_model):
+            try:
+                return client.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    config=config,
+                )
+            except errors.APIError as e:
+                # Errors retrying can't fix (bad request, bad key...) fail immediately
+                if e.code not in RETRYABLE_CODES:
+                    raise
+                last_error = e
+                print(f"[gemini] {e.code} on {model}, attempt {attempt + 1}/{attempts_per_model}")
+                if attempt < attempts_per_model - 1:
+                    time.sleep(2 ** attempt)    # waits 1s, then 2s
+
+    raise last_error
+
 
 SYLLABUS_PARSING_PROMPT = """You convert a raw college syllabus into structured data.
 
@@ -61,7 +92,7 @@ filtering, password strength estimation, disease prediction.
 
 def stream_parse_syllabus(raw_text: str):
     response_stream = client.models.generate_content_stream(
-        model=m,
+        model="gemini-3.5-flash",
         contents=raw_text,
         config=types.GenerateContentConfig(
             system_instruction=SYLLABUS_PARSING_PROMPT,
@@ -98,7 +129,7 @@ NOTES DOCUMENT TEXT (may be truncated):
 {note_text[:8000]}
 """
     response = client.models.generate_content(
-        model=m,
+        model="gemini-3.5-flash",
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction=NOTE_CLASSIFICATION_PROMPT,
@@ -109,31 +140,39 @@ NOTES DOCUMENT TEXT (may be truncated):
     result = json.loads(response.text)
     return result["unit_index"]
 
-SUMMARY_PROMPT = """
+SUMMARY_PROMPT = r"""
 You are an AI study assistant for college students.
 
 You will receive study material belonging to ONE unit of a course.
 
-Generate a concise, exam-oriented summary of the material.
+Generate a very short, exam-oriented revision summary. The student should be able to scan the whole unit in a few minutes.
 
-Requirements:
-- Cover the important concepts from the provided material.
-- Write all mathematical formulas in LaTeX, using $...$ for inline formulas and $$...$$ for standalone formulas.
-- Organize the answer using clear headings and subheadings.
-- Use bullet points wherever appropriate.
-- Keep explanations short and easy to revise.
-- Include important definitions, concepts, formulas, steps, and distinctions when present.
+Content rules:
+- Cover every important topic, but each point must be ONE short line (a phrase or a single short sentence).
+- Do NOT include examples, worked calculations, case studies, or background explanations.
+- List the important definitions, key terms, rules, types/classifications, steps, and distinctions as brief points.
+- Include every important formula, but only the formula itself with one short line saying what it is. Do not derive it or work through numbers.
 - Do not invent information that is not present in the material.
-- Do not repeat the same point unnecessarily.
-- Focus on information useful for understanding and exam revision.
-- Do not write a conclusion or introduction unless it is useful.
-- Return clean Markdown only.
+- Do not repeat the same point.
+- No introduction and no conclusion.
+
+Structure rules:
+- Use clear headings (##) for major topics and bullet points beneath them.
+- Use a table only when comparing items side by side.
+- Put each key definition or exam-critical rule on its own line as a Markdown blockquote starting with "> ", with the key term in bold. Use these sparingly (at most 5 in total).
+
+Formula rules:
+- Keep currency symbols exactly as they appear in the material. Write a dollar sign in normal text as \$ (for example \$12,000), and never put a currency symbol inside $...$ math. If an amount is part of a calculation, write only the number inside the math and keep the currency symbol in the sentence around it.
+- Write all mathematical expressions in LaTeX.
+- Put every formula on its own line wrapped in $$...$$, with a blank line before and after it. Write fractions with \dfrac.
+- Use $...$ only for short inline symbols such as $X_1$.
+
+Return clean Markdown only.
 """
 
 
 def generate_unit_summary(unit_text: str) -> str:
-    response = client.models.generate_content(
-        model=m,
+    response = _generate_with_retry(
         contents=unit_text,
         config=types.GenerateContentConfig(
             system_instruction=SUMMARY_PROMPT,
@@ -143,30 +182,45 @@ def generate_unit_summary(unit_text: str) -> str:
 
     return response.text
 
-NOTES_PROMPT = """
+NOTES_PROMPT = r"""
 You are an AI study assistant for college students.
 
 You will receive study material belonging to ONE unit of a course.
 
-Generate clear study notes that help the student UNDERSTAND the material.
+Generate complete, detailed study notes that let the student fully understand the unit WITHOUT reading the original material. Do not miss any detail.
 
-Requirements:
-- These notes are more explanatory than a summary: explain each concept in 2-4 short sentences, not just keywords.
-- Write all mathematical formulas in LaTeX, using $...$ for inline formulas and $$...$$ for standalone formulas.
-- Organize the notes with clear headings and subheadings that follow the logical flow of the material.
-- Explain what each concept is, how it works, and why it matters, when the material supports it.
-- Include examples, formulas, and steps that appear in the material.
-- Use bullet points for lists and short paragraphs for explanations.
-- Keep the notes concise. Do not copy the material word for word.
-- Do not invent information that is not present in the material.
-- Do not repeat the same point unnecessarily.
-- Return clean Markdown only.
+Content rules:
+- Cover EVERY topic, subtopic, definition, concept, type, step, rule, and formula that appears in the material, in the same order as the material.
+- Explain each point properly: what it is, how it works, why it matters, and how it differs from related concepts, when the material supports it.
+- Include all examples, worked calculations, and case studies from the material, with the steps shown clearly.
+- Keep every number, name, condition, and exception that the material mentions.
+- Do not invent information that is not in the material. If something is unclear in the material, keep it as written and do not guess.
+- Do not copy the material word for word. Rewrite it in clear, simple language.
+- Do not repeat the same point, and do not add filler, an introduction, or a conclusion.
+
+Structure rules:
+- The material may contain figure markers such as [[FIGURE 3f2a...-...-..._p5_1]]. Copy every marker exactly as written, character for character, onto its own line. Place each marker right after the paragraph that explains that figure, using the nearby text and captions to decide where it belongs. Never invent, edit, merge, or drop markers. You cannot see the figures, so do not describe what a figure shows beyond what the surrounding text says.
+- At the end of every worked example, put its final result on its own line as a Markdown blockquote that starts exactly with "> **Final Answer:** " followed by the result (use $...$ for any math inside it). Use this label only for final results of examples, never for definitions or rules.
+- Use headings (##) for major topics and subheadings (###) for subtopics.
+- Put all code, commands, SQL queries, and pseudocode from the material in fenced code blocks with the language name (for example ```python or ```sql). Keep the code exactly as it appears in the material. Use single backticks only for short names inside a sentence, like a function or column name.
+- Use short paragraphs for explanations and bullet points for lists, types, and steps.
+- Use a table when comparing items side by side.
+- Put each key definition or exam-critical rule on its own line as a Markdown blockquote starting with "> ", with the key term in bold. Use these sparingly (at most 8 in total).
+
+Formula rules:
+- Keep currency symbols exactly as they appear in the material. Write a dollar sign in normal text as \$ (for example \$12,000), and never put a currency symbol inside $...$ math. If an amount is part of a calculation, write only the number inside the math and keep the currency symbol in the sentence around it.
+- Write all mathematical expressions in LaTeX.
+- Put each FORMULA (a general rule, equation, or definition-like expression such as v' = ...) on its own line wrapped in $$...$$, with a blank line before and after it. Write fractions with \dfrac. Do NOT use $$...$$ for anything else.
+- Write each STEP of a worked example calculation as its own separate line containing only one inline math expression wrapped in single $...$, with a blank line before and after it. Do not put any words on that line and do not use $$...$$ for steps. Put explanatory words in a normal sentence on a separate line.
+- Use $...$ inside sentences for short inline symbols such as $X_1$.
+- After each formula, add a short line explaining what each symbol means.
+
+Return clean Markdown only.
 """
 
 
 def generate_unit_notes(unit_text: str) -> str:
-    response = client.models.generate_content(
-        model=m,
+    response = _generate_with_retry(
         contents=unit_text,
         config=types.GenerateContentConfig(
             system_instruction=NOTES_PROMPT,
@@ -204,8 +258,7 @@ Requirements:
 
 
 def generate_unit_flashcards(unit_text: str) -> list[dict]:
-    response = client.models.generate_content(
-        model=m,
+    response = _generate_with_retry(
         contents=unit_text,
         config=types.GenerateContentConfig(
             system_instruction=FLASHCARDS_PROMPT,
@@ -227,3 +280,49 @@ def generate_unit_flashcards(unit_text: str) -> list[dict]:
         for c in cards
         if c.get("question", "").strip() and c.get("answer", "").strip()
     ]
+
+FIGURE_CLASSIFY_PROMPT = """
+You will receive numbered images extracted from a college course PDF.
+Decide which images are FIGURES worth showing inside study notes.
+
+FIGURES (include): diagrams, flowcharts, architecture or process diagrams, charts, graphs and plots,
+illustrations, photos, annotated visuals, geometric or mathematical drawings.
+
+NOT figures (exclude): tables of any kind (including dataframe or spreadsheet output),
+screenshots of code or terminal output, images that are mostly plain text,
+equations or formulas shown as an image, logos, icons, decorative images, slide backgrounds.
+
+If you are unsure whether an image is a figure, exclude it.
+
+Return a JSON array containing only the numbers of the images that are figures.
+Return [] if none are.
+"""
+
+
+def classify_figures(items):
+    """
+    items: list of (key, jpeg_bytes) thumbnails.
+    Returns the set of keys that Gemini says are real figures.
+    Raises on failure, so the caller can skip figures for this run.
+    """
+    contents = []
+    for n, (key, data) in enumerate(items, start=1):
+        contents.append(f"Image {n}:")
+        contents.append(types.Part.from_bytes(data=data, mime_type="image/jpeg"))
+
+    response = _generate_with_retry(
+        contents=contents,
+        config=types.GenerateContentConfig(
+            system_instruction=FIGURE_CLASSIFY_PROMPT,
+            temperature=0,
+            response_mime_type="application/json",
+            response_schema=list[int],
+        ),
+    )
+
+    numbers = json.loads(response.text)
+    return {
+        items[n - 1][0]
+        for n in numbers
+        if isinstance(n, int) and 1 <= n <= len(items)
+    }
