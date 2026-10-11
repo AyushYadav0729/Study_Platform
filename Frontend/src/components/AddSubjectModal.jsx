@@ -4,6 +4,8 @@ import { X, Upload } from "lucide-react";
 import Input from "./ui/Input";
 import Button from "./ui/Button";
 import { setPendingSyllabus } from "../utils/pendingSyllabusStore";
+import { createPortal } from "react-dom";
+
 
 function AddSubjectModal({ open, onClose, onAdd }) {
   const navigate = useNavigate();
@@ -87,7 +89,7 @@ function AddSubjectModal({ open, onClose, onAdd }) {
     }
   };
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-[2px]"
       onClick={handleClose}
@@ -200,7 +202,8 @@ function AddSubjectModal({ open, onClose, onAdd }) {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

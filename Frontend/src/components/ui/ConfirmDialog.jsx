@@ -1,4 +1,5 @@
 import Button from "./Button";
+import { createPortal } from "react-dom";
 
 function ConfirmDialog({
   open,
@@ -13,7 +14,7 @@ function ConfirmDialog({
 }) {
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-[2px]"
       onClick={onCancel}
@@ -51,7 +52,8 @@ function ConfirmDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
