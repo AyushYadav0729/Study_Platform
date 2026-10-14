@@ -33,6 +33,7 @@ from app.gemini_client import (
     generate_unit_summary,
     generate_unit_notes,
     generate_unit_flashcards,
+    generate_unit_cheatsheet,
 )
 from uuid import UUID
 import json
@@ -599,6 +600,26 @@ def get_unit_ai_notes(
         "cached": cached
     }
 
+
+@app.get("/units/{unit_id}/cheatsheet")
+def get_unit_cheatsheet(
+    unit_id: UUID,
+    regenerate: bool = False,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    unit = get_owned_unit(unit_id, current_user, db)
+    content, used, skipped, cached = get_or_generate(
+        unit, "cheatsheet", generate_unit_cheatsheet, db, regenerate
+    )
+    return {
+        "unit_id": unit.id,
+        "unit_name": unit.name,
+        "cheatsheet": content,
+        "files_used": used,
+        "files_skipped": skipped,
+        "cached": cached
+    }
 
 @app.get("/units/{unit_id}/flashcards")
 def get_unit_flashcards(

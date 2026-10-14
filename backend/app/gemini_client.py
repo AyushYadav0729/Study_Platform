@@ -9,8 +9,7 @@ from google.genai import errors
 client = genai.Client(api_key=GEMINI_API_KEY)
 # Tried in order. If the first model keeps failing with a temporary error,
 # the next one is used. Check the fallback name is available on your API key.
-MODELS = ["gemini-3.5-flash-lite", "gemini-2.5-flash"]
-
+MODELS = ["gemini-3.5-flash-lite" , "gemini-2.5-flash-lite"]
 # Temporary errors worth retrying: rate limit / overloaded / server error
 RETRYABLE_CODES = {429, 500, 503, 504}
 
@@ -92,7 +91,7 @@ filtering, password strength estimation, disease prediction.
 
 def stream_parse_syllabus(raw_text: str):
     response_stream = client.models.generate_content_stream(
-        model="gemini-3.5-flash",
+        model="gemini-3.5-flash-lite",
         contents=raw_text,
         config=types.GenerateContentConfig(
             system_instruction=SYLLABUS_PARSING_PROMPT,
@@ -129,7 +128,7 @@ NOTES DOCUMENT TEXT (may be truncated):
 {note_text[:8000]}
 """
     response = client.models.generate_content(
-        model="gemini-3.5-flash",
+        model="gemini-3.5-flash-lite",
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction=NOTE_CLASSIFICATION_PROMPT,
@@ -235,6 +234,51 @@ class FlashcardItem(BaseModel):
     question: str
     answer: str
 
+
+CHEATSHEET_PROMPT = r"""
+You are an AI study assistant for college students.
+
+You will receive study material belonging to ONE unit of a course.
+
+Generate a formula sheet (cheat sheet) that contains ONLY the formulas from the material.
+
+Content rules:
+- Include every formula, equation, and mathematical rule that appears in the material.
+- Each entry has two parts: a bold name with a one-line meaning (maximum 12 words), then the formula.
+- No examples, no worked calculations, no numbers plugged in, no derivations, no questions.
+- No definitions or concepts that are not formulas. No introduction, no conclusion, no extra notes.
+- Do not invent formulas that are not in the material. Do not repeat a formula.
+- Do not mention figures or images and do not output figure markers.
+- If the material contains no formulas at all, return exactly: No formulas found in this unit.
+
+Structure rules:
+- Group entries under short headings (##) named after the topic.
+- Entry format (keep exactly this pattern):
+
+**Name:** one-line meaning
+
+$$formula$$
+
+Formula rules:
+- Write all mathematical expressions in LaTeX.
+- Put every formula on its own line wrapped in $$...$$, with a blank line before and after it. Write fractions with \dfrac.
+- Use $...$ only for short inline symbols such as $X_1$ inside the one-line meaning.
+- Keep currency symbols out of math. Write a dollar sign in normal text as \$.
+
+Return clean Markdown only.
+"""
+
+
+def generate_unit_cheatsheet(unit_text: str) -> str:
+    response = _generate_with_retry(
+        contents=unit_text,
+        config=types.GenerateContentConfig(
+            system_instruction=CHEATSHEET_PROMPT,
+            temperature=0.1,
+        ),
+    )
+
+    return response.text
 
 FLASHCARDS_PROMPT = """
 You are an AI study assistant for college students.
