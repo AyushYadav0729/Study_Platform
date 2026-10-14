@@ -23,6 +23,7 @@ const TABS = [
   { key: "materials", label: "Materials" },
   { key: "summary", label: "Summary" },
   { key: "notes", label: "Notes" },
+  { key: "cheatsheet", label: "Cheat Sheet" },
   { key: "flashcards", label: "Flashcards" },
 ];
 
@@ -409,7 +410,7 @@ function Unit({ subjects }) {
                 "var(--font-display)",
             }}
           >
-            3
+            4
           </p>
         </div>
 
@@ -481,7 +482,7 @@ function Unit({ subjects }) {
         <div
           className="unit-tab-track"
           style={{
-            transform: `translate3d(-${activeTabIndex * 25}%, 0, 0)`,
+            transform: `translate3d(-${activeTabIndex * 20}%, 0, 0)`,
           }}
         >
           <div className="unit-tab-slide">
@@ -727,6 +728,7 @@ function Unit({ subjects }) {
               field="summary"
               active={activeTab === "summary"}
               loadingText="Reading your materials and writing a summary…"
+              printTitle={`${unit.name} - Summary`}
             />
           </div>
           </div>
@@ -770,12 +772,51 @@ function Unit({ subjects }) {
               field="notes"
               active={activeTab === "notes"}
               loadingText="Reading your materials and writing study notes…"
+              printTitle={`${unit.name} - Notes`}
             />
           </div>
           </div>
         </div>
+        
 
-          <div className="unit-tab-slide">
+        <div className="unit-tab-slide">
+          <div className="unit-tab-content">
+            <div className="rounded-2xl border border-border bg-surface p-6 text-ink shadow-sm sm:p-9">
+              <div className="mb-7 border-b border-border pb-6">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/10 text-accent">
+                    <Sparkles className="h-3.5 w-3.5" />
+                  </span>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+                    AI generated
+                  </p>
+                </div>
+
+                <h2
+                  className="mt-1 text-[1.5rem]"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  Cheat sheet
+                </h2>
+
+                <p className="mt-1 text-[11px] text-ink-faint">
+                  Every formula from this module, one line each.
+                </p>
+              </div>
+
+              <AiMarkdownTab
+                key={`cheatsheet-${unitId}`}
+                endpoint={`/units/${unitId}/cheatsheet`}
+                field="cheatsheet"
+                active={activeTab === "cheatsheet"}
+                loadingText="Collecting the formulas from your materials…"
+                printTitle={`${unit.name} - Cheat Sheet`}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="unit-tab-slide">
 
         {/* ----------------------------------------------------
             Flashcards

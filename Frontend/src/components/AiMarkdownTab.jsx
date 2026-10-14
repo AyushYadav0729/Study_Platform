@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { Sparkles, RefreshCw } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Sparkles, RefreshCw, Download } from "lucide-react";
 import api from "../services/authService";
 import Button from "./ui/Button";
 import remarkMath from "remark-math";
@@ -107,6 +108,21 @@ const mdComponents = {
   },
 };
 
+const printComponents = {
+  ...mdComponents,
+  img: ({ node, src, alt }) => (
+    <span className="my-4 block text-center">
+      <img
+        src={src}
+        alt={alt}
+        loading="eager"
+        className="mx-auto max-h-[480px] w-auto max-w-full object-contain"
+      />
+      {alt && <span className="mt-1 block text-[12px] text-ink-faint">{alt}</span>}
+    </span>
+  ),
+};
+
 // Gemini sometimes writes currency as $\$12,000$. The parser mistakes the escaped
 // dollar for the closing one, so swap it for a symbol KaTeX draws itself.
 // Gemini sometimes writes currency as $\$12,000$. Turn it into plain text.
@@ -120,7 +136,7 @@ const normalizeMath = (text) =>
     .replace(/\\\(([\s\S]*?)\\\)/g, (_, m) => `$${m}$`)
     .replace(/^[ \t]*\$\$([^\n]+?)\$\$[ \t]*$/gm, (_, m) => `\n$$\n${m.trim()}\n$$\n`);
 
-function AiMarkdownTab({ endpoint, field, active, loadingText }) {
+function AiMarkdownTab({ endpoint, field, active, loadingText, printTitle }) {
   const [status, setStatus] = useState("idle"); // idle | loading | done | error
   const [content, setContent] = useState("");
   const [skipped, setSkipped] = useState([]);
@@ -128,6 +144,8 @@ function AiMarkdownTab({ endpoint, field, active, loadingText }) {
   const [regenerating, setRegenerating] = useState(false);
   const [regenerateError, setRegenerateError] = useState("");
   const startedRef = useRef(false); // stops the double-fetch in StrictMode
+  const [printing, setPrinting] = useState(false);
+  const printRef = useRef(null);
 
   const load = async () => {
     startedRef.current = true;
@@ -174,6 +192,36 @@ function AiMarkdownTab({ endpoint, field, active, loadingText }) {
     if (active && !startedRef.current) load();
   }, [active]);
 
+  useEffect(() => {
+    if (!printing) return;
+    const oldTitle = document.title;
+    const finish = () => {
+      document.title = oldTitle;
+      setPrinting(false);
+    };
+    let cancelled = false;
+
+    (async () => {
+      const imgs = Array.from(printRef.current?.querySelectorAll("img") || []);
+      await Promise.all(
+        imgs.map((img) =>
+          img.complete ? null : new Promise((r) => { img.onload = img.onerror = r; })
+        )
+      );
+      if (document.fonts?.ready) await document.fonts.ready;
+      if (cancelled) return;
+      window.addEventListener("afterprint", finish, { once: true });
+      document.title = printTitle; // becomes the PDF file name
+      window.print();
+    })();
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("afterprint", finish);
+      document.title = oldTitle;
+    };
+  }, [printing]);
+
   if (!active) return null;
 
   if (status === "loading" || status === "idle") {
@@ -206,7 +254,18 @@ function AiMarkdownTab({ endpoint, field, active, loadingText }) {
           {regenerateError}
         </div>
       )}
-      <div className="mb-2 flex justify-end">
+      <div className="mb-2 flex justify-end gap-2">
+        {printTitle && (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setPrinting(true)}
+            disabled={printing || regenerating}
+          >
+            <Download className="h-4 w-4" />
+            {printing ? "Preparing..." : "Download PDF"}
+          </Button>
+        )}
         <Button type="button" variant="ghost" onClick={regenerate} disabled={regenerating}>
           <RefreshCw className={`h-4 w-4 ${regenerating ? "animate-spin" : ""}`} />
           {regenerating ? "Regenerating..." : "Regenerate"}
@@ -226,6 +285,20 @@ function AiMarkdownTab({ endpoint, field, active, loadingText }) {
           Not included (unsupported file type): {skipped.join(", ")}
         </div>
       )}
+      {printing &&
+        createPortal(
+          <div ref={printRef} className="print-only ai-md">
+            <h1 className="print-title">{printTitle}</h1>
+            <ReactMarkdown
+              remarkPlugins={[remarkMath, remarkGfm]}
+              rehypePlugins={[rehypeKatex]}
+              components={printComponents}
+            >
+              {normalizeMath(content)}
+            </ReactMarkdown>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

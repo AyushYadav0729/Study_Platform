@@ -145,3 +145,4 @@ class UnitContent(Base):
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
     unit = relationship("Unit", back_populates="contents")
+# "summary" | "notes" | "flashcards" | "cheatsheet"
