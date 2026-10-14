@@ -9,7 +9,7 @@ from google.genai import errors
 client = genai.Client(api_key=GEMINI_API_KEY)
 # Tried in order. If the first model keeps failing with a temporary error,
 # the next one is used. Check the fallback name is available on your API key.
-MODELS = ["gemini-3.5-flash", "gemini-2.5-flash"]
+MODELS = ["gemini-3.5-flash-lite", "gemini-2.5-flash"]
 
 # Temporary errors worth retrying: rate limit / overloaded / server error
 RETRYABLE_CODES = {429, 500, 503, 504}

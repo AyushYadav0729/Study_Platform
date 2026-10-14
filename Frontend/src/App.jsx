@@ -1,101 +1,82 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Home from "./pages/Home";
 import Subject from "./pages/Subject";
 import Unit from "./pages/Unit";
+import Landing from "./pages/landing/Landing";
 
 import ProtectedRoute from "./components/ProtectedRoute";
 import AppLayout from "./components/layout/AppLayout";
 import { useSubjects } from "./hooks/useSubjects";
-import { authService } from "./services/authService";
 
-function App() {
+function AppRoutes() {
+  const { pathname } = useLocation();
+  const isPublicRoute = ["/", "/login", "/register"].includes(pathname);
+
+  // Do not request authenticated subject data while showing public pages.
   const {
     subjects,
     loading,
     addSubject,
     updateSubject,
-    refreshSubjects,
     removeSubject,
     clearSubjects,
-  } = useSubjects();
+  } = useSubjects({ enabled: !isPublicRoute });
 
   return (
-    <BrowserRouter>
-      <div className="min-h-screen bg-bg">
-        <Routes>
+    <div className="min-h-screen bg-bg">
+      <Routes>
+        <Route path="/" element={<Landing />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+
+        <Route
+          element={
+            <ProtectedRoute>
+              <AppLayout
+                subjects={subjects}
+                onAddSubject={addSubject}
+                onClearSubjects={clearSubjects}
+              />
+            </ProtectedRoute>
+          }
+        >
           <Route
-            path="/"
+            path="/dashboard"
             element={
-              <Navigate
-                to={
-                  authService.isAuthenticated()
-                    ? "/dashboard"
-                    : "/login"
-                }
-                replace
+              <Home
+                subjects={subjects}
+                subjectsLoading={loading}
+                onAddSubject={addSubject}
+                onRemoveSubject={removeSubject}
               />
             }
           />
-
           <Route
-            path="/login"
-            element={<Login onLogin={refreshSubjects} />}
-          />
-
-          <Route
-            path="/register"
-            element={<Register />}
-          />
-
-          <Route
+            path="/subject/:id"
             element={
-              <ProtectedRoute>
-                <AppLayout
-                  subjects={subjects}
-                  onAddSubject={addSubject}
-                  onClearSubjects={clearSubjects}
-                />
-              </ProtectedRoute>
+              <Subject
+                subjects={subjects}
+                onRemoveSubject={removeSubject}
+                onUpdateSubject={updateSubject}
+              />
             }
-          >
-            <Route
-              path="/dashboard"
-              element={
-                <Home
-                  subjects={subjects}
-                  subjectsLoading={loading}
-                  onAddSubject={addSubject}
-                  onRemoveSubject={removeSubject}
-                />
-              }
-            />
-
-            <Route
-              path="/subject/:id"
-              element={
-                <Subject
-                  subjects={subjects}
-                  onRemoveSubject={removeSubject}
-                  onUpdateSubject={updateSubject}
-                />
-              }
-            />
-
-            <Route
-              path="/subject/:id/unit/:unitId"
-              element={<Unit subjects={subjects} />}
-            />
-          </Route>
-
-          <Route
-            path="*"
-            element={<Navigate to="/" replace />}
           />
-        </Routes>
-      </div>
+          <Route path="/subject/:id/unit/:unitId" element={<Unit subjects={subjects} />} />
+        </Route>
+
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AppRoutes />
     </BrowserRouter>
   );
 }
