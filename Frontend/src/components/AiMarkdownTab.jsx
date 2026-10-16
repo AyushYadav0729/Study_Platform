@@ -136,7 +136,7 @@ const normalizeMath = (text) =>
     .replace(/\\\(([\s\S]*?)\\\)/g, (_, m) => `$${m}$`)
     .replace(/^[ \t]*\$\$([^\n]+?)\$\$[ \t]*$/gm, (_, m) => `\n$$\n${m.trim()}\n$$\n`);
 
-function AiMarkdownTab({ endpoint, field, active, loadingText, printTitle }) {
+function AiMarkdownTab({ endpoint, field, active, loadingText, printTitle, actionsSlotId }) {
   const [status, setStatus] = useState("idle"); // idle | loading | done | error
   const [content, setContent] = useState("");
   const [skipped, setSkipped] = useState([]);
@@ -218,7 +218,6 @@ function AiMarkdownTab({ endpoint, field, active, loadingText, printTitle }) {
     return () => {
       cancelled = true;
       window.removeEventListener("afterprint", finish);
-      document.title = oldTitle;
     };
   }, [printing]);
 
@@ -247,18 +246,14 @@ function AiMarkdownTab({ endpoint, field, active, loadingText, printTitle }) {
     );
   }
 
-  return (
-    <div>
-      {regenerateError && (
-        <div className="mb-3 rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-[12px] text-danger">
-          {regenerateError}
-        </div>
-      )}
-      <div className="mb-2 flex justify-end gap-2">
+    const actionsSlot = actionsSlotId ? document.getElementById(actionsSlotId) : null;
+
+    const actions = (
+      <>
         {printTitle && (
           <Button
             type="button"
-            variant="ghost"
+            variant="secondary"
             onClick={() => setPrinting(true)}
             disabled={printing || regenerating}
           >
@@ -266,11 +261,26 @@ function AiMarkdownTab({ endpoint, field, active, loadingText, printTitle }) {
             {printing ? "Preparing..." : "Download PDF"}
           </Button>
         )}
-        <Button type="button" variant="ghost" onClick={regenerate} disabled={regenerating}>
+        <Button type="button" variant="secondary" onClick={regenerate} disabled={regenerating}>
           <RefreshCw className={`h-4 w-4 ${regenerating ? "animate-spin" : ""}`} />
           {regenerating ? "Regenerating..." : "Regenerate"}
         </Button>
-      </div>
+      </>
+    );
+    
+  return (
+    <div>
+      {regenerateError && (
+        <div className="mb-3 rounded-xl border border-danger/30 bg-danger-soft px-4 py-3 text-[12px] text-danger">
+          {regenerateError}
+        </div>
+      )}
+      {actionsSlot ? (
+      createPortal(actions, actionsSlot)
+        ) : (
+          <div className="mb-2 flex justify-end gap-2">{actions}</div>
+        )}
+
       <div className="ai-md rounded-2xl border border-border bg-bg-alt/40 px-6 py-6 shadow-sm sm:px-8">
         <ReactMarkdown
           remarkPlugins={[remarkMath, remarkGfm]}

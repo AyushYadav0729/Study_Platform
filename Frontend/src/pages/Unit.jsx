@@ -28,6 +28,9 @@ const TABS = [
 ];
 
 function Unit({ subjects }) {
+  const tabBarRef = useRef(null);
+  const [tabBarHeight, setTabBarHeight] = useState(0);
+  const [pageProgress, setPageProgress] = useState(0);
   const { id, unitId } = useParams();
 
   const subject = subjects.find((s) => s.id === id);
@@ -107,6 +110,16 @@ function Unit({ subjects }) {
       cancelled = true;
     };
   }, [id, unitId]);
+
+  useLayoutEffect(() => {
+    const bar = tabBarRef.current;
+    if (!bar) return;
+    const measure = () => setTabBarHeight(bar.offsetHeight);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(bar);
+    return () => ro.disconnect();
+  }, [loading]);
 
   const handlePreview = async (selectedFile) => {
     setPreviewFile(selectedFile);
@@ -252,6 +265,41 @@ function Unit({ subjects }) {
     };
   }, [activeTab]);
 
+  useEffect(() => {
+    const bar = tabBarRef.current;
+    if (!bar) return;
+
+    // find the element that actually scrolls (AppLayout's overflow-y-auto div)
+    let scroller = bar.parentElement;
+    while (scroller) {
+      const oy = getComputedStyle(scroller).overflowY;
+      if (oy === "auto" || oy === "scroll") break;
+      scroller = scroller.parentElement;
+    }
+    if (!scroller) return;
+
+    const update = () => {
+      const max = scroller.scrollHeight - scroller.clientHeight;
+      if (max <= 0 || scroller.scrollTop >= max - 2) {
+        setPageProgress(100);
+      } else {
+        setPageProgress((scroller.scrollTop / max) * 100);
+      }
+    };
+
+    update();
+    scroller.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    const ro = new ResizeObserver(update);
+    if (scroller.firstElementChild) ro.observe(scroller.firstElementChild);
+
+    return () => {
+      scroller.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+      ro.disconnect();
+    };
+  }, [loading, activeTab]);
+
   const backLink = (
     <Link
       to={`/subject/${id}`}
@@ -301,6 +349,26 @@ function Unit({ subjects }) {
       </div>
     );
   }
+
+  const progressBar = (
+    <div
+      className="sticky z-10 -mx-2 mb-5 bg-surface px-2 pb-3 pt-2"
+      style={{ top: tabBarHeight }}
+    >
+      <div className="rounded-xl border border-border bg-bg-alt/60 px-4 py-3">
+        <div className="flex items-center justify-between text-[12px]">
+          <span className="text-ink-dim">Reading progress</span>
+          <span className="text-ink-dim">{Math.round(pageProgress)}%</span>
+        </div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-border/70">
+          <div
+            className="h-full rounded-full bg-accent transition-[width] duration-150"
+            style={{ width: `${pageProgress}%` }}
+          />
+        </div>
+      </div>
+    </div>
+  );  
 
   /* ============================================================
      Render
@@ -429,7 +497,9 @@ function Unit({ subjects }) {
           Tabs
          ====================================================== */}
 
-      <div className="sticky top-0 z-20 -mx-8 mt-10 border-y border-border bg-bg/95 px-8 backdrop-blur lg:-mx-10 lg:px-10 xl:-mx-12 xl:px-12">
+      <div 
+        ref={tabBarRef}
+        className="sticky top-0 z-20 -mx-8 mt-10 border-y border-border bg-bg/95 px-8 backdrop-blur lg:-mx-10 lg:px-10 xl:-mx-12 xl:px-12">
         <div
           aria-label="Module workspace tabs"
           className="relative mx-auto flex w-full gap-7 overflow-x-auto"
@@ -478,7 +548,7 @@ function Unit({ subjects }) {
           Main workspace
          ====================================================== */}
 
-      <section className="mt-8 overflow-hidden">
+      <section className="mt-8 overflow-x-clip">
         <div
           className="unit-tab-track"
           style={{
@@ -697,36 +767,40 @@ function Unit({ subjects }) {
         <div className="unit-tab-slide">
           <div className="unit-tab-content">
           <div className="rounded-2xl border border-border bg-surface p-6 text-ink shadow-sm sm:p-9">
-            <div className="mb-7 border-b border-border pb-6">
-              <div className="flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/10 text-accent">
-                  <Sparkles className="h-3.5 w-3.5" />
-                </span>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-                  AI generated
+            <div className="mb-7 flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/10 text-accent">
+                    <Sparkles className="h-3.5 w-3.5" />
+                  </span>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+                    AI generated
+                  </p>
+                </div>
+
+                <h2
+                  className="mt-1 text-[1.5rem]"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  Module summary
+                </h2>
+
+                <p className="mt-1 text-[11px] text-ink-faint">
+                  Generated from the material uploaded to this module.
                 </p>
               </div>
 
-              <h2
-                className="mt-1 text-[1.5rem]"
-                style={{
-                  fontFamily:
-                    "var(--font-display)",
-                }}
-              >
-                Module summary
-              </h2>
-
-              <p className="mt-1 text-[11px] text-ink-faint">
-                Generated from the material uploaded to this module.
-              </p>
+              <div id="summary-actions" className="flex gap-2" />
             </div>
+
+            {activeTab === "summary" && progressBar}
 
             <AiMarkdownTab
               key={`summary-${unitId}`}
               endpoint={`/units/${unitId}/summary`}
               field="summary"
               active={activeTab === "summary"}
+              actionsSlotId="summary-actions"
               loadingText="Reading your materials and writing a summary…"
               printTitle={`${unit.name} - Summary`}
             />
@@ -741,48 +815,8 @@ function Unit({ subjects }) {
         <div className="unit-tab-slide">
           <div className="unit-tab-content">
           <div className="rounded-2xl border border-border bg-surface p-6 text-ink shadow-sm sm:p-9">
-            <div className="mb-7 border-b border-border pb-6">
-              <div className="flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/10 text-accent">
-                  <Sparkles className="h-3.5 w-3.5" />
-                </span>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-                  AI generated
-                </p>
-              </div>
-
-              <h2
-                className="mt-1 text-[1.5rem]"
-                style={{
-                  fontFamily:
-                    "var(--font-display)",
-                }}
-              >
-                Study notes
-              </h2>
-
-              <p className="mt-1 text-[11px] text-ink-faint">
-                Structured notes generated from your module material.
-              </p>
-            </div>
-
-            <AiMarkdownTab
-              key={`notes-${unitId}`}
-              endpoint={`/units/${unitId}/ai-notes`}
-              field="notes"
-              active={activeTab === "notes"}
-              loadingText="Reading your materials and writing study notes…"
-              printTitle={`${unit.name} - Notes`}
-            />
-          </div>
-          </div>
-        </div>
-        
-
-        <div className="unit-tab-slide">
-          <div className="unit-tab-content">
-            <div className="rounded-2xl border border-border bg-surface p-6 text-ink shadow-sm sm:p-9">
-              <div className="mb-7 border-b border-border pb-6">
+            <div className="mb-7 flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between">
+              <div>
                 <div className="flex items-center gap-2">
                   <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/10 text-accent">
                     <Sparkles className="h-3.5 w-3.5" />
@@ -796,19 +830,70 @@ function Unit({ subjects }) {
                   className="mt-1 text-[1.5rem]"
                   style={{ fontFamily: "var(--font-display)" }}
                 >
-                  Cheat sheet
+                  Study notes
                 </h2>
 
                 <p className="mt-1 text-[11px] text-ink-faint">
-                  Every formula from this module, one line each.
+                  Structured notes generated from your module material.
                 </p>
               </div>
+
+              <div id="notes-actions" className="flex gap-2" />
+            </div>
+
+            {activeTab === "notes" && progressBar}
+
+            <AiMarkdownTab
+              key={`notes-${unitId}`}
+              endpoint={`/units/${unitId}/ai-notes`}
+              field="notes"
+              active={activeTab === "notes"}
+              actionsSlotId="notes-actions"
+              loadingText="Reading your materials and writing study notes…"
+              printTitle={`${unit.name} - Notes`}
+            />
+          </div>
+          </div>
+        </div>
+        
+
+        <div className="unit-tab-slide">
+          <div className="unit-tab-content">
+            <div className="rounded-2xl border border-border bg-surface p-6 text-ink shadow-sm sm:p-9">
+              <div className="mb-7 flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/10 text-accent">
+                      <Sparkles className="h-3.5 w-3.5" />
+                    </span>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+                      AI generated
+                    </p>
+                  </div>
+
+                  <h2
+                    className="mt-1 text-[1.5rem]"
+                    style={{ fontFamily: "var(--font-display)" }}
+                  >
+                    Cheat sheet
+                  </h2>
+
+                  <p className="mt-1 text-[11px] text-ink-faint">
+                    Every formula from this module, one line each.
+                  </p>
+                </div>
+
+                <div id="cheatsheet-actions" className="flex gap-2" />
+              </div>
+
+              {activeTab === "cheatsheet" && progressBar}
 
               <AiMarkdownTab
                 key={`cheatsheet-${unitId}`}
                 endpoint={`/units/${unitId}/cheatsheet`}
                 field="cheatsheet"
                 active={activeTab === "cheatsheet"}
+                actionsSlotId="cheatsheet-actions"
                 loadingText="Collecting the formulas from your materials…"
                 printTitle={`${unit.name} - Cheat Sheet`}
               />
